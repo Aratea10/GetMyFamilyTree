@@ -94,7 +94,7 @@ class CompleteFamilyTests(unittest.TestCase):
                 self.assertTrue(crawl(store, session, max_people=0, progress=0))
                 self.assertEqual(store.count("done"), 4)
                 self.assertEqual(store.count("pending"), 0)
-                self.assertEqual(len(session.calls), 4)
+                self.assertEqual(len(session.calls), 8)
             finally:
                 store.close()
 
@@ -118,7 +118,9 @@ class CompleteFamilyTests(unittest.TestCase):
                     session.calls,
                     [
                         "/platform/tree/persons?pids=CCCC-333",
+                        "/platform/tree/persons/CCCC-333/families",
                         "/platform/tree/persons?pids=DDDD-444",
+                        "/platform/tree/persons/DDDD-444/families",
                     ],
                 )
             finally:
@@ -168,6 +170,52 @@ class CompleteFamilyTests(unittest.TestCase):
                 self.assertIn("1 CHIL @I", gedcom)
                 self.assertIn("1 HUSB @I", gedcom)
                 self.assertEqual(gedcom.splitlines()[-1], "0 TRLR")
+            finally:
+                store.close()
+
+    def test_family_endpoint_finds_siblings_and_preserves_link(self):
+        class SessionWithSibling(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.records["EEEE-555"] = {
+                    "persons": [{"id": "EEEE-555", "living": False, "names": []}]
+                }
+
+            def get_url(self, url, headers=None, no_api=False):
+                if url == "/platform/tree/persons/AAAA-111/families":
+                    self.calls.append(url)
+                    return {
+                        "persons": [
+                            {"id": "EEEE-555", "living": False, "names": []}
+                        ],
+                        "relationships": [
+                            {
+                                "id": "parent-child-extra",
+                                "type": "http://gedcomx.org/ParentChild",
+                                "person1": {"resourceId": "AAAA-111"},
+                                "person2": {"resourceId": "EEEE-555"},
+                            }
+                        ],
+                    }
+                return super().get_url(url, headers, no_api)
+
+        with tempfile.TemporaryDirectory() as folder:
+            store = Checkpoint(Path(folder) / "family.sqlite")
+            session = SessionWithSibling()
+            try:
+                store.seed(["AAAA-111"])
+                self.assertTrue(crawl(store, session, max_people=0, progress=0))
+                self.assertEqual(store.count("done"), 5)
+                output = Path(folder) / "family.ged"
+                people, families = assemble(
+                    store, session, output,
+                    no_notes=True, no_sources=True, no_contributors=True
+                )
+                gedcom = output.read_text(encoding="utf-8")
+                self.assertEqual(people, 5)
+                self.assertGreaterEqual(families, 3)
+                self.assertIn("1 _FSFTID EEEE-555", gedcom)
+                self.assertIn("1 CHIL @I", gedcom)
             finally:
                 store.close()
 
