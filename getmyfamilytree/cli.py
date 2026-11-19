@@ -25,6 +25,11 @@ RELATIONSHIP_FIELDS = ("childAndParentsRelationships", "relationships")
 MEMBER_FIELDS = ("parent1", "parent2", "child", "person1", "person2")
 
 
+def _member_id(relationship, name):
+    member = relationship.get(name)
+    return member.get("resourceId") if isinstance(member, dict) else None
+
+
 def related_people(document):
     """Find endpoints in *all* parent/child and couple relationships."""
     found = set()
@@ -218,48 +223,52 @@ def assemble(
     tree = Tree(ReplaySession(session, checkpoint), no_sources=no_sources, no_memories=no_memories)
     tree.add_indis(ids)
 
-    # The normal program makes these links while traversing. Recreate them
-    # after all accessible person records have been loaded into the tree.
-    for fid, person in list(tree.indi.items()):
-        relationships = set(person.parents)
-        relationships.update(
-            (father, mother)
-            for father, mother, child in person.children
-            if child == fid
-        )
-        for father, mother in relationships:
-            father = father if father in tree.indi else None
-            mother = mother if mother in tree.indi else None
-            if father or mother:
-                tree.add_trio(father, mother, fid)
-        for father, mother, child in person.children:
-            if child not in tree.indi:
+    # Rebuild relationships from *all* cached responses, not just those
+    # visible while Tree.add_indis was loading a particular batch.
+    # Otherwise couples and children crossing a 200-person batch boundary
+    # are silently omitted from the GEDCOM.
+    parent_links = set()
+    couple_links = {}
+    for fid in ids:
+        document = checkpoint.get_response(PERSON_URL + fid)
+        if not document:
+            continue
+        for relationship in document.get("childAndParentsRelationships", []):
+            child = _member_id(relationship, "child")
+            father = _member_id(relationship, "parent1")
+            mother = _member_id(relationship, "parent2")
+            if child in tree.indi:
+                parent_links.add((father, mother, child))
+        for relationship in document.get("relationships", []):
+            if relationship.get("type") != "http://gedcomx.org/Couple":
                 continue
-            father = father if father in tree.indi else None
-            mother = mother if mother in tree.indi else None
-            if father or mother:
-                tree.add_trio(father, mother, child)
+            first = _member_id(relationship, "person1")
+            second = _member_id(relationship, "person2")
+            if first in tree.indi and second in tree.indi:
+                couple_links.setdefault(frozenset((first, second)), (
+                    first, second, relationship.get("id")
+                ))
 
-    seen_couples = set()
-    for person in tree.indi.values():
-        for first, second, relationship_id in person.spouses:
-            if first not in tree.indi or second not in tree.indi:
-                continue
-            pair_key = frozenset((first, second))
-            if pair_key in seen_couples:
-                continue
-            seen_couples.add(pair_key)
-            if (first, second) in tree.fam:
-                pair = (first, second)
-            elif (second, first) in tree.fam:
-                pair = (second, first)
-            else:
-                pair = (first, second)
-                tree.add_fam(*pair)
-            tree.indi[first].add_fams(pair)
-            tree.indi[second].add_fams(pair)
-            if relationship_id:
-                tree.fam[pair].add_marriage(relationship_id)
+    for father, mother, child in sorted(
+        parent_links, key=lambda link: tuple(item or "" for item in link)
+    ):
+        father = father if father in tree.indi else None
+        mother = mother if mother in tree.indi else None
+        if father or mother:
+            tree.add_trio(father, mother, child)
+
+    for first, second, relationship_id in couple_links.values():
+        if (first, second) in tree.fam:
+            pair = (first, second)
+        elif (second, first) in tree.fam:
+            pair = (second, first)
+        else:
+            pair = (first, second)
+            tree.add_fam(*pair)
+        tree.indi[first].add_fams(pair)
+        tree.indi[second].add_fams(pair)
+        if relationship_id:
+            tree.fam[pair].add_marriage(relationship_id)
 
     if not no_notes or not no_contributors:
         with ThreadPoolExecutor(max_workers=workers) as executor:
