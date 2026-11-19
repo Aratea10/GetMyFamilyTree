@@ -20,6 +20,7 @@ from getmyancestors.classes.session import Session
 from getmyancestors.classes.tree import Tree
 
 PERSON_URL = "/platform/tree/persons?pids="
+FAMILIES_URL = "/platform/tree/persons/{}/families"
 PERSON_ID = re.compile(r"[A-Z0-9]{4}-[A-Z0-9]{3}\Z")
 RELATIONSHIP_FIELDS = ("childAndParentsRelationships", "relationships")
 MEMBER_FIELDS = ("parent1", "parent2", "child", "person1", "person2")
@@ -41,6 +42,10 @@ def related_people(document):
                     identifier = member.get("resourceId")
                     if identifier and PERSON_ID.fullmatch(identifier):
                         found.add(identifier)
+    for person in document.get("persons", []):
+        identifier = person.get("id")
+        if identifier and PERSON_ID.fullmatch(identifier):
+            found.add(identifier)
     return found
 
 
@@ -155,7 +160,17 @@ def crawl(checkpoint, session, max_people=1000, progress=25):
             checkpoint.fail(fid)
             print(f"Could not retrieve {fid}; will retry on a future run.", file=sys.stderr)
             continue
+        # The families endpoint also includes siblings and other relatives
+        # that the regular person response may not return.
+        families_key = FAMILIES_URL.format(fid)
+        families = checkpoint.get_response(families_key)
+        if families is None:
+            families = session.get_url(families_key)
+            if families is not None:
+                checkpoint.save_response(families_key, families)
         discovered = related_people(document)
+        if families:
+            discovered.update(related_people(families))
         checkpoint.finish(fid, discovered)
         done = checkpoint.count("done")
         if progress and done % progress == 0:
@@ -228,26 +243,33 @@ def assemble(
     # Otherwise couples and children crossing a 200-person batch boundary
     # are silently omitted from the GEDCOM.
     parent_links = set()
+    parent_child_edges = set()
     couple_links = {}
     for fid in ids:
-        document = checkpoint.get_response(PERSON_URL + fid)
-        if not document:
-            continue
-        for relationship in document.get("childAndParentsRelationships", []):
-            child = _member_id(relationship, "child")
-            father = _member_id(relationship, "parent1")
-            mother = _member_id(relationship, "parent2")
-            if child in tree.indi:
-                parent_links.add((father, mother, child))
-        for relationship in document.get("relationships", []):
-            if relationship.get("type") != "http://gedcomx.org/Couple":
+        for document in (
+            checkpoint.get_response(PERSON_URL + fid),
+            checkpoint.get_response(FAMILIES_URL.format(fid)),
+        ):
+            if not document:
                 continue
-            first = _member_id(relationship, "person1")
-            second = _member_id(relationship, "person2")
-            if first in tree.indi and second in tree.indi:
-                couple_links.setdefault(frozenset((first, second)), (
-                    first, second, relationship.get("id")
-                ))
+            for relationship in document.get("childAndParentsRelationships", []):
+                child = _member_id(relationship, "child")
+                father = _member_id(relationship, "parent1")
+                mother = _member_id(relationship, "parent2")
+                if child in tree.indi:
+                    parent_links.add((father, mother, child))
+            for relationship in document.get("relationships", []):
+                kind = relationship.get("type")
+                first = _member_id(relationship, "person1")
+                second = _member_id(relationship, "person2")
+                if kind == "http://gedcomx.org/ParentChild":
+                    if first in tree.indi and second in tree.indi:
+                        parent_child_edges.add((first, second))
+                elif kind == "http://gedcomx.org/Couple":
+                    if first in tree.indi and second in tree.indi:
+                        couple_links.setdefault(frozenset((first, second)), (
+                            first, second, relationship.get("id")
+                        ))
 
     for father, mother, child in sorted(
         parent_links, key=lambda link: tuple(item or "" for item in link)
@@ -256,6 +278,20 @@ def assemble(
         mother = mother if mother in tree.indi else None
         if father or mother:
             tree.add_trio(father, mother, child)
+
+    # Families may return a ParentChild link without a full
+    # ChildAndParents relationship. Preserve such links if no matching
+    # full relationship was found in the cached person responses.
+    for parent, child in sorted(parent_child_edges):
+        if any(
+            existing_child == child and parent in (father, mother)
+            for father, mother, existing_child in parent_links
+        ):
+            continue
+        if tree.indi[parent].gender == "F":
+            tree.add_trio(None, parent, child)
+        else:
+            tree.add_trio(parent, None, child)
 
     for first, second, relationship_id in couple_links.values():
         if (first, second) in tree.fam:
