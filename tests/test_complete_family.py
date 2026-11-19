@@ -23,6 +23,7 @@ class FakeSession:
                 "relationships": [
                     {
                         "id": "couple-1",
+                        "type": "http://gedcomx.org/Couple",
                         "person1": {"resourceId": "AAAA-111"},
                         "person2": {"resourceId": "BBBB-222"},
                     }
@@ -167,6 +168,48 @@ class CompleteFamilyTests(unittest.TestCase):
                 self.assertIn("1 CHIL @I", gedcom)
                 self.assertIn("1 HUSB @I", gedcom)
                 self.assertEqual(gedcom.splitlines()[-1], "0 TRLR")
+            finally:
+                store.close()
+
+    def test_gedcom_relationships_across_large_batches(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = Checkpoint(Path(folder) / "family.sqlite")
+            session = FakeSession()
+            ids = [f"F000-{number:03d}" for number in range(1, 203)]
+            try:
+                for fid in ids:
+                    document = {
+                        "persons": [{"id": fid, "living": False, "names": []}]
+                    }
+                    if fid == ids[0]:
+                        document["childAndParentsRelationships"] = [
+                            {
+                                "id": "cross-batch",
+                                "child": {"resourceId": ids[0]},
+                                "parent1": {"resourceId": ids[-1]},
+                            }
+                        ]
+                    store.save_response(
+                        "/platform/tree/persons?pids=" + fid, document
+                    )
+                store.seed(ids)
+                for fid in ids:
+                    store.finish(fid, [])
+                output = Path(folder) / "large.ged"
+                people, families = assemble(
+                    store, session, output, no_sources=True,
+                    no_notes=True, no_contributors=True
+                )
+                data = output.read_text(encoding="utf-8")
+                self.assertEqual(people, len(ids))
+                self.assertEqual(families, 1)
+                self.assertIn("1 _FSFTID " + ids[0], data)
+                self.assertIn("1 _FSFTID " + ids[-1], data)
+                self.assertEqual(
+                    sum(line.endswith(" INDI") for line in data.splitlines()),
+                    len(ids)
+                )
+                self.assertIn("1 CHIL @I", data)
             finally:
                 store.close()
 
