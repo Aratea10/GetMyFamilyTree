@@ -12,14 +12,20 @@ MESSAGES = {
         "description": "Explore all accessible FamilySearch relatives in every direction.",
         "help_language": "Interface language: auto (system), en (English), es (Spanish)",
         "help_individual": "FamilySearch person ID",
-        "help_output": "Output GEDCOM",
+        "help_output": "Output GEDCOM filename (.ged) or export folder",
         "help_database": "Persistent SQLite checkpoint (defaults to output with .sqlite suffix)",
         "help_max_people": "Pause after this many people; 0 means no cap (potentially enormous)",
         "help_rate_limit": "Maximum HTTP requests per second, passed to FamilySearch session",
         "help_remember": "After a successful login, save credentials in the system keyring",
         "help_forget": "Remove saved FamilySearch credentials and exit",
         "help_progress": "Show progress every N people (default: 1; 0 disables progress)",
-        "help_report_only": "Export review CSVs from the saved checkpoint without logging in or downloading",
+        "help_report_only": "Regenerate the person-by-person report from SQLite without logging in",
+        "help_csv": "Also export seven separate CSV review tables (optional)",
+        "error_output_path": "Output must be a .ged filename or a folder",
+        "person_report_saved": (
+            "Created one review document for {people} people "
+            "and {events} events: {path}"
+        ),
         "error_report_requires_output": "--report-only requires -o/--output",
         "error_report_database_missing": "Saved checkpoint not found: {path}",
         "report_saved": (
@@ -87,7 +93,7 @@ MESSAGES = {
         "description": "Explora todos los familiares accesibles en FamilySearch en cualquier dirección.",
         "help_language": "Idioma de la interfaz: auto (sistema), en (inglés), es (español)",
         "help_individual": "ID de la persona en FamilySearch",
-        "help_output": "Archivo GEDCOM de salida",
+        "help_output": "Archivo GEDCOM (.ged) o carpeta de exportación",
         "help_database": "Base SQLite de progreso (por defecto, junto al GEDCOM)",
         "help_max_people": "Detenerse tras este número de personas; 0 sin límite (puede ser enorme)",
         "help_rate_limit": "Máximo de solicitudes HTTP por segundo a FamilySearch",
@@ -95,7 +101,13 @@ MESSAGES = {
         "help_forget": "Eliminar las credenciales guardadas y salir",
         "help_progress": "Mostrar el progreso cada N personas (1 por defecto; 0 para desactivar)",
         "help_report_only": (
-            "Generar archivos CSV de revisión sin iniciar sesión ni descargar de nuevo"
+            "Regenerar las fichas por persona desde SQLite sin iniciar sesión"
+        ),
+        "help_csv": "Generar también las siete tablas CSV por separado (opcional)",
+        "error_output_path": "La salida debe ser un archivo .ged o una carpeta",
+        "person_report_saved": (
+            "Creado un único documento de revisión para {people} personas "
+            "y {events} acontecimientos: {path}"
         ),
         "error_report_requires_output": "--report-only necesita -o/--output",
         "error_report_database_missing": "No se encuentra el progreso guardado: {path}",
