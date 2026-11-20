@@ -50,6 +50,27 @@ def related_people(document):
     return found
 
 
+def person_display_name(document, fid):
+    """Use the FamilySearch display name, falling back to the person ID."""
+    for person in document.get("persons", []):
+        if person.get("id") != fid:
+            continue
+        name = (person.get("display") or {}).get("name")
+        if not name:
+            forms = [
+                form
+                for entry in person.get("names", [])
+                for form in entry.get("nameForms", [])
+            ]
+            name = next(
+                (form.get("fullText") for form in forms if form.get("fullText")),
+                None,
+            )
+        if name:
+            return " ".join(str(name).split())
+    return fid
+
+
 class Checkpoint:
     """Persistent discovery queue and successful FamilySearch responses."""
 
@@ -148,13 +169,14 @@ class Checkpoint:
 
     def finish(self, fid, discovered):
         with self.lock, self.connection:
-            self.connection.executemany(
+            added = self.connection.executemany(
                 "INSERT OR IGNORE INTO people (fid) VALUES (?)",
                 ((person,) for person in sorted(discovered) if person != fid),
-            )
+            ).rowcount
             self.connection.execute(
                 "UPDATE people SET status = 'done' WHERE fid = ?", (fid,)
             )
+            return added
 
     def fail(self, fid):
         with self.lock, self.connection:
@@ -163,16 +185,34 @@ class Checkpoint:
             )
 
 
-def crawl(checkpoint, session, max_people=1000, progress=25):
-    """Breadth-first walk; max_people=0 removes the safety cap.
+def crawl(checkpoint, session, max_people=1000, progress=1):
+    """Explore reachable people and report each completed person by default.
 
-    Return True only if the reachable queue has been exhausted without failures.
+    max_people=0 removes the person cap; progress=0 silences progress messages.
     """
     done = checkpoint.count("done")
+    pending = checkpoint.count("pending")
+    if progress:
+        limit = str(max_people) if max_people else "unlimited"
+        print(
+            f"Starting exploration: {done} already explored, "
+            f"{pending} queued, limit {limit}.",
+            file=sys.stderr, flush=True,
+        )
+
     while max_people == 0 or done < max_people:
         fid = checkpoint.next_pending()
         if fid is None:
             break
+        report = bool(progress and (done + 1) % progress == 0)
+        if report:
+            print(
+                f"Exploring {done + 1}"
+                + (f"/{max_people}" if max_people else "")
+                + f": {fid}...",
+                file=sys.stderr, flush=True,
+            )
+
         key = PERSON_URL + fid
         document = checkpoint.get_response(key)
         if document is None:
@@ -183,7 +223,10 @@ def crawl(checkpoint, session, max_people=1000, progress=25):
             person.get("id") == fid for person in document.get("persons", [])
         ):
             checkpoint.fail(fid)
-            print(f"Could not retrieve {fid}; will retry on a future run.", file=sys.stderr)
+            print(
+                f"Could not retrieve {fid}; will retry on a future run.",
+                file=sys.stderr, flush=True,
+            )
             continue
         # The families endpoint also includes siblings and other relatives
         # that the regular person response may not return.
@@ -196,14 +239,22 @@ def crawl(checkpoint, session, max_people=1000, progress=25):
         discovered = related_people(document)
         if families:
             discovered.update(related_people(families))
-        checkpoint.finish(fid, discovered)
+        added = checkpoint.finish(fid, discovered)
         done += 1
-        if progress and done % progress == 0:
+        if report:
             print(
-                f"Explored {done} people, "
-                f"{checkpoint.count('pending')} still to explore.",
-                file=sys.stderr,
+                f"Found: {person_display_name(document, fid)} ({fid}) | "
+                f"+{added} new relatives | "
+                f"{checkpoint.count('pending')} queued.",
+                file=sys.stderr, flush=True,
             )
+    if progress:
+        print(
+            f"Exploration paused: {done} explored, "
+            f"{checkpoint.count('pending')} queued, "
+            f"{checkpoint.count('failed')} unavailable.",
+            file=sys.stderr, flush=True,
+        )
     return checkpoint.count("pending") == 0 and checkpoint.count("failed") == 0
 
 
@@ -412,6 +463,10 @@ def main(argv=None):
         "--forget-login", action="store_true",
         help="Remove saved FamilySearch credentials and exit"
     )
+    parser.add_argument(
+        "--progress-every", type=int, default=1, metavar="N",
+        help="Show progress every N people (default: 1; 0 disables progress)"
+    )
     parser.add_argument("--no-notes", action="store_true")
     parser.add_argument("--no-sources", action="store_true")
     parser.add_argument("--no-memories", action="store_true")
@@ -431,8 +486,8 @@ def main(argv=None):
         parser.error("both -i/--individual and -o/--output are required for a download")
     if not PERSON_ID.fullmatch(args.individual):
         parser.error("Invalid FamilySearch ID")
-    if args.max_people < 0 or args.rate_limit < 1:
-        parser.error("--max-people must be >= 0 and --rate-limit must be >= 1")
+    if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
+        parser.error("max-people and progress-every must be >= 0; rate-limit must be >= 1")
     checkpoint_path = args.database or args.output.with_suffix(".sqlite")
     checkpoint = Checkpoint(checkpoint_path)
     try:
@@ -488,10 +543,17 @@ def main(argv=None):
         del password
         print(f"Checkpoint: {checkpoint.path}", file=sys.stderr)
         try:
-            exhausted = crawl(checkpoint, session, max_people=args.max_people)
+            exhausted = crawl(
+                checkpoint, session, max_people=args.max_people,
+                progress=args.progress_every,
+            )
         except KeyboardInterrupt:
             exhausted = False
             print("\nPaused. Writing GEDCOM snapshot...", file=sys.stderr)
+        print(
+            f"Building GEDCOM from {checkpoint.count('done')} retrieved people...",
+            file=sys.stderr, flush=True,
+        )
         n, families = assemble(
             checkpoint, session, args.output,
             no_notes=args.no_notes, no_sources=args.no_sources,
