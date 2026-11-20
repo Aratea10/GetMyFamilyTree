@@ -20,6 +20,7 @@ from getmyancestors.classes.session import Session
 from getmyancestors.classes.tree import Tree
 from getmyfamilytree.credentials import CredentialStore, CredentialStoreError
 from getmyfamilytree.i18n import resolve_language, translate
+from getmyfamilytree.reports import export_reports
 
 PERSON_URL = "/platform/tree/persons?pids="
 FAMILIES_URL = "/platform/tree/persons/{}/families"
@@ -477,6 +478,9 @@ def main(argv=None):
         metavar="N", help=tr("help_progress")
     )
     parser.add_argument(
+        "--report-only", action="store_true", help=tr("help_report_only")
+    )
+    parser.add_argument(
         "--no-notes", action="store_true", help=tr("help_no_notes")
     )
     parser.add_argument(
@@ -501,6 +505,25 @@ def main(argv=None):
         print(tr("saved_removed" if removed else "saved_not_found"))
         return
 
+    if args.report_only:
+        if not args.output:
+            parser.error(tr("error_report_requires_output"))
+        report_database = args.database or args.output.with_suffix(".sqlite")
+        if not report_database.expanduser().is_file():
+            parser.error(tr("error_report_database_missing", path=report_database))
+        report_checkpoint = Checkpoint(report_database)
+        try:
+            result = export_reports(report_checkpoint, args.output)
+        finally:
+            report_checkpoint.close()
+        print(
+            tr("report_saved", events=result["events"],
+               people=result["people"], path=result["paths"]["events"]),
+        )
+        print(
+            tr("report_review", path=result["paths"]["review"]),
+        )
+        return
     if not args.individual or not args.output:
         parser.error(tr("error_required"))
     if not PERSON_ID.fullmatch(args.individual):
@@ -573,6 +596,16 @@ def main(argv=None):
             no_notes=args.no_notes, no_sources=args.no_sources,
             no_memories=args.no_memories,
             no_contributors=args.no_contributors,
+        )
+        report = export_reports(checkpoint, args.output)
+        print(
+            tr("report_saved", events=report["events"],
+               people=report["people"], path=report["paths"]["events"]),
+            file=sys.stderr,
+        )
+        print(
+            tr("report_review", path=report["paths"]["review"]),
+            file=sys.stderr,
         )
         pending = checkpoint.count("pending")
         failed = checkpoint.count("failed")
