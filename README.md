@@ -127,6 +127,25 @@ secure keyring is available, the program will continue to ask for credentials.
 
 For safety, the first run pauses after **1,000 people**. That number is not a generation limit. Run the same command with `--max-people 5000` to explore more. If you deliberately want no person limit, pass `--max-people 0`; a large connected tree could run for a very long time and consume significant disk space and requests.
 
+### Live progress
+
+The terminal now reports progress **for every person** by default. As
+FamilySearch records are explored, it shows the person's name (when available),
+FamilySearch ID, the number of newly discovered relatives and how many are
+still queued. For example:
+
+```text
+Starting exploration: 20 already explored, 78 queued, limit 100.
+Exploring 21/100: XXXX-XXX...
+Found: Example Person (XXXX-XXX) | +3 new relatives | 80 queued.
+```
+
+To reduce terminal output for large downloads, use
+`--progress-every 25` (one update per 25 people) or
+`--progress-every 0` to disable per-person progress. The person count
+tracks successful explorations, not the total size of the worldwide family
+tree; newly found connections can increase the number still queued.
+
 The command creates an SQLite checkpoint beside the GEDCOM (same filename with `.sqlite` suffix). Running with the same `-o` path resumes using that checkpoint, rather than starting from scratch. Use Ctrl+C to request an orderly pause and a GEDCOM snapshot.
 
 The downloaded GEDCOM and SQLite checkpoint can contain **private family information**. Keep both locally and out of public Git repositories.
