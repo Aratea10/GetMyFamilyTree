@@ -19,6 +19,13 @@ MESSAGES = {
         "help_remember": "After a successful login, save credentials in the system keyring",
         "help_forget": "Remove saved FamilySearch credentials and exit",
         "help_progress": "Show progress every N people (default: 1; 0 disables progress)",
+        "help_report_only": "Export review CSVs from the saved checkpoint without logging in or downloading",
+        "error_report_requires_output": "--report-only requires -o/--output",
+        "error_report_database_missing": "Saved checkpoint not found: {path}",
+        "report_saved": (
+            "Created review tables for {people} people and {events} events: {path}"
+        ),
+        "report_review": "Review checklist (annotations preserved): {path}",
         "help_no_notes": "Do not download notes",
         "help_no_sources": "Do not download sources",
         "help_no_memories": "Do not download memory references",
@@ -86,6 +93,15 @@ MESSAGES = {
         "help_remember": "Guardar el inicio de sesión en el llavero tras autenticarse",
         "help_forget": "Eliminar las credenciales guardadas y salir",
         "help_progress": "Mostrar el progreso cada N personas (1 por defecto; 0 para desactivar)",
+        "help_report_only": (
+            "Generar archivos CSV de revisión sin iniciar sesión ni descargar de nuevo"
+        ),
+        "error_report_requires_output": "--report-only necesita -o/--output",
+        "error_report_database_missing": "No se encuentra el progreso guardado: {path}",
+        "report_saved": (
+            "Creadas tablas de revisión para {people} personas y {events} acontecimientos: {path}"
+        ),
+        "report_review": "Lista de verificación (anotaciones conservadas): {path}",
         "help_no_notes": "No descargar notas",
         "help_no_sources": "No descargar fuentes",
         "help_no_memories": "No descargar referencias a recuerdos",
