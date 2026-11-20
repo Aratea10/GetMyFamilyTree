@@ -22,6 +22,7 @@ from getmyfamilytree.credentials import CredentialStore, CredentialStoreError
 from getmyfamilytree.i18n import resolve_language, translate
 from getmyfamilytree.reports import export_reports
 from getmyfamilytree.person_report import write_person_report
+from getmyfamilytree.scopes import crawl_scope
 
 PERSON_URL = "/platform/tree/persons?pids="
 FAMILIES_URL = "/platform/tree/persons/{}/families"
@@ -119,6 +120,14 @@ class Checkpoint:
                 "INSERT OR IGNORE INTO metadata(key, value) VALUES ('origin', ?)",
                 (identifier,),
             )
+
+    def get_origin(self):
+        """Return the starting FamilySearch ID stored in this checkpoint."""
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT value FROM metadata WHERE key = 'origin'"
+            ).fetchone()
+        return row[0] if row else None
 
     def seed(self, ids):
         with self.lock, self.connection:
@@ -309,9 +318,10 @@ class ReplaySession:
 def assemble(
     checkpoint, session, output, workers=2, no_notes=False,
     no_sources=False, no_memories=False, no_contributors=False,
+    selected_ids=None,
 ):
-    """Build a GEDCOM snapshot from the fetched part of the connected graph."""
-    ids = checkpoint.completed_ids()
+    """Build a GEDCOM snapshot containing only the selected scope."""
+    ids = checkpoint.completed_ids() if selected_ids is None else list(selected_ids)
     if not ids:
         return 0, 0
     tree = Tree(ReplaySession(session, checkpoint), no_sources=no_sources, no_memories=no_memories)
@@ -476,6 +486,16 @@ def main(argv=None):
         "--max-people", type=int, default=1000, help=tr("help_max_people")
     )
     parser.add_argument(
+        "--scope", choices=("full", "ancestors", "descendants", "family"),
+        default="full", help=tr("help_scope")
+    )
+    parser.add_argument(
+        "--generations", type=int, metavar="N", help=tr("help_generations")
+    )
+    parser.add_argument(
+        "--distance", type=int, metavar="N", help=tr("help_distance")
+    )
+    parser.add_argument(
         "--rate-limit", type=int, default=2, help=tr("help_rate_limit")
     )
     parser.add_argument(
@@ -508,6 +528,16 @@ def main(argv=None):
         help=tr("help_no_contributors"),
     )
     args = parser.parse_args(argv)
+    if args.scope in ("ancestors", "descendants"):
+        if args.generations is None or args.generations < 0 or args.distance is not None:
+            parser.error(tr("error_generations"))
+    elif args.scope == "family":
+        if args.distance is None or args.distance < 0 or args.generations is not None:
+            parser.error(tr("error_distance"))
+    elif args.generations is not None or args.distance is not None:
+        parser.error(tr("error_full_options"))
+    if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
+        parser.error(tr("error_invalid_limits"))
     credentials = CredentialStore()
     if args.forget_login:
         if args.remember_login:
@@ -535,11 +565,25 @@ def main(argv=None):
             parser.error(tr("error_report_database_missing", path=checkpoint_path))
         report_checkpoint = Checkpoint(checkpoint_path)
         try:
+            selected_ids = None
+            if args.scope != "full":
+                origin = report_checkpoint.get_origin()
+                if not origin:
+                    parser.error(tr("error_scope_origin"))
+                scoped = crawl_scope(
+                    report_checkpoint, None, origin, scope=args.scope,
+                    generations=args.generations, distance=args.distance,
+                    max_people=args.max_people, progress=0, language=language,
+                )
+                selected_ids = scoped.ids
             result = write_person_report(
-                report_checkpoint, output_path, language=language
+                report_checkpoint, output_path, language=language,
+                selected_ids=selected_ids,
             )
             if args.csv:
-                export_reports(report_checkpoint, output_path)
+                export_reports(
+                    report_checkpoint, output_path, selected_ids=selected_ids
+                )
         finally:
             report_checkpoint.close()
         print(tr("person_report_saved", people=result["people"],
@@ -598,17 +642,17 @@ def main(argv=None):
         del password
 
         print(tr("checkpoint", path=checkpoint.path), file=sys.stderr)
-        try:
-            exhausted = crawl(
-                checkpoint, session, max_people=args.max_people,
-                progress=args.progress_every, language=language,
-            )
-        except KeyboardInterrupt:
-            exhausted = False
+        scoped = crawl_scope(
+            checkpoint, session, args.individual, scope=args.scope,
+            generations=args.generations, distance=args.distance,
+            max_people=args.max_people, progress=args.progress_every,
+            language=language,
+        )
+        if scoped.interrupted:
             print("\n" + tr("interrupted"), file=sys.stderr)
 
         print(
-            tr("building", done=checkpoint.count("done")),
+            tr("building", done=len(scoped.ids)),
             file=sys.stderr, flush=True,
         )
         n, families = assemble(
@@ -616,23 +660,29 @@ def main(argv=None):
             no_notes=args.no_notes, no_sources=args.no_sources,
             no_memories=args.no_memories,
             no_contributors=args.no_contributors,
+            selected_ids=scoped.ids,
         )
-        report = write_person_report(checkpoint, output_path, language=language)
+        report = write_person_report(
+            checkpoint, output_path, language=language,
+            selected_ids=scoped.ids,
+        )
         if args.csv:
-            export_reports(checkpoint, output_path)
+            export_reports(
+                checkpoint, output_path, selected_ids=scoped.ids
+            )
         print(
             tr("person_report_saved", people=report["people"],
                events=report["events"], path=report["path"]),
             file=sys.stderr,
         )
-        pending = checkpoint.count("pending")
-        failed = checkpoint.count("failed")
+        pending = scoped.pending
+        failed = scoped.failed
         print(
             tr("saved_tree", people=n, families=families,
                path=output_path, pending=pending, failed=failed),
             file=sys.stderr,
         )
-        if not exhausted:
+        if not scoped.exhausted:
             print(tr("resume"), file=sys.stderr)
     finally:
         checkpoint.close()
