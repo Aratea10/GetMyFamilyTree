@@ -191,6 +191,31 @@ class CompleteFamilyTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_replay_does_not_include_extra_unrequested_people(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = Checkpoint(Path(folder) / "family.sqlite")
+            try:
+                document = {
+                    "persons": [
+                        {"id": "AAAA-111", "living": False, "names": []},
+                        {"id": "EEEE-555", "living": False, "names": []},
+                    ],
+                    "relationships": [],
+                }
+                store.save_response(
+                    "/platform/tree/persons?pids=AAAA-111", document
+                )
+                replay = ReplaySession(FakeSession(), store)
+                result = replay.get_url(
+                    "/platform/tree/persons?pids=AAAA-111"
+                )
+                self.assertEqual(
+                    [person["id"] for person in result["persons"]],
+                    ["AAAA-111"],
+                )
+            finally:
+                store.close()
+
     def test_replay_can_combine_cached_person_responses(self):
         with tempfile.TemporaryDirectory() as folder:
             store = Checkpoint(Path(folder) / "family.sqlite")
