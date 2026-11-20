@@ -100,6 +100,25 @@ class Checkpoint:
             self.connection.execute(
                 "CREATE INDEX IF NOT EXISTS people_by_status ON people(status)"
             )
+            self.connection.execute(
+                "CREATE TABLE IF NOT EXISTS review_notes "
+                "(fid TEXT PRIMARY KEY, content TEXT NOT NULL)"
+            )
+
+    def load_review_notes(self):
+        """Keep manually verified notes when switching download modes."""
+        with self.lock:
+            return dict(self.connection.execute(
+                "SELECT fid, content FROM review_notes"
+            ).fetchall())
+
+    def save_review_notes(self, notes):
+        with self.lock, self.connection:
+            self.connection.executemany(
+                "INSERT OR REPLACE INTO review_notes (fid, content) "
+                "VALUES (?, ?)",
+                ((fid, text) for fid, text in notes.items()),
+            )
 
     def close(self):
         with self.lock:
