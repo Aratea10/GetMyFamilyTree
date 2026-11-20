@@ -67,10 +67,33 @@ class Checkpoint:
                 "CREATE TABLE IF NOT EXISTS responses "
                 "(request_key TEXT PRIMARY KEY, data TEXT NOT NULL)"
             )
+            self.connection.execute(
+                "CREATE TABLE IF NOT EXISTS metadata "
+                "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            )
+            self.connection.execute(
+                "CREATE INDEX IF NOT EXISTS people_by_status ON people(status)"
+            )
 
     def close(self):
         with self.lock:
             self.connection.close()
+
+    def set_origin(self, identifier):
+        """Reject a checkpoint belonging to a different starting person."""
+        with self.lock, self.connection:
+            row = self.connection.execute(
+                "SELECT value FROM metadata WHERE key = 'origin'"
+            ).fetchone()
+            if row and row[0] != identifier:
+                raise ValueError(
+                    f"Checkpoint belongs to {row[0]}, not {identifier}. "
+                    "Choose a different output or database filename."
+                )
+            self.connection.execute(
+                "INSERT OR IGNORE INTO metadata(key, value) VALUES ('origin', ?)",
+                (identifier,),
+            )
 
     def seed(self, ids):
         with self.lock, self.connection:
@@ -144,7 +167,8 @@ def crawl(checkpoint, session, max_people=1000, progress=25):
 
     Return True only if the reachable queue has been exhausted without failures.
     """
-    while max_people == 0 or checkpoint.count("done") < max_people:
+    done = checkpoint.count("done")
+    while max_people == 0 or done < max_people:
         fid = checkpoint.next_pending()
         if fid is None:
             break
@@ -172,7 +196,7 @@ def crawl(checkpoint, session, max_people=1000, progress=25):
         if families:
             discovered.update(related_people(families))
         checkpoint.finish(fid, discovered)
-        done = checkpoint.count("done")
+        done += 1
         if progress and done % progress == 0:
             print(
                 f"Explored {done} people, "
@@ -373,6 +397,10 @@ def main(argv=None):
     checkpoint_path = args.database or args.output.with_suffix(".sqlite")
     checkpoint = Checkpoint(checkpoint_path)
     try:
+        try:
+            checkpoint.set_origin(args.individual)
+        except ValueError as error:
+            parser.exit(2, f"{error}\n")
         checkpoint.seed([args.individual])
         checkpoint.retry_failed()
         username = input("Enter FamilySearch username: ")
