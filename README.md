@@ -14,17 +14,78 @@ FamilySearch may omit records, restrict access or throttle requests. This tool c
 
 ## Installation
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/). No global Python packages needed.
+GetMyFamilyTree is designed for **Windows, macOS, and Linux**. It is a Python
+command-line tool, not a graphical desktop application. Install
+[uv](https://docs.astral.sh/uv/getting-started/installation/) first; it can
+download Python 3.12 and run the tool in an isolated environment without
+installing Python packages globally.
+
+### macOS
+
+Open Terminal and install uv using the official installer:
 
 ```sh
-uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree --help
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Alternatively, if Homebrew is already installed: `brew install uv`.
+
+### Windows
+
+Open **PowerShell** or **Windows Terminal**. On systems with Windows Package
+Manager (WinGet), install uv using:
+
+```powershell
+winget install --id=astral-sh.uv -e
+```
+
+Alternatively, see the [official uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/)
+for the PowerShell standalone installer.
+
+### Linux
+
+Open a terminal and install uv using:
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+On any platform, restart the terminal if necessary, then check that uv is
+available:
+
+```text
+uvx --version
 ```
 
 ## Download your connected family tree
 
+These commands run the tool directly from its GitHub repository and request
+Python 3.12 through uv. They do not require cloning this repository.
+
+**macOS and Linux** (save to Downloads):
+
 ```sh
 uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i LVXP-TH5 -o ~/Downloads/GetMyFamilyTree.ged
 ```
+
+**Windows PowerShell** (save to Downloads):
+
+```powershell
+uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i LVXP-TH5 -o "$HOME\Downloads\GetMyFamilyTree.ged"
+```
+
+Replace `LVXP-TH5` with your own FamilySearch person ID. On all platforms
+you can instead use `-o GetMyFamilyTree.ged` to save to the current directory.
+
+To display all options without starting a download:
+
+```text
+uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree --help
+```
+
+**Platform support is still being validated.** The commands are intended
+to work on all three systems, but successful end-to-end FamilySearch downloads
+have not yet been verified on each platform.
 
 Your FamilySearch credentials will be requested interactively. **Never put the password in the command or commit it to Git.**
 
