@@ -323,8 +323,8 @@ def _review_rows(path):
         }
 
 
-def collect_reports(checkpoint):
-    """Collect all cached genealogy data without writing any files."""
+def collect_reports(checkpoint, selected_ids=None):
+    """Collect cached genealogy for the selected people only."""
     people = []
     events = []
     relations = {}
@@ -333,7 +333,7 @@ def collect_reports(checkpoint):
     notes = []
     memories = []
 
-    for person_id in checkpoint.completed_ids():
+    for person_id in (checkpoint.completed_ids() if selected_ids is None else selected_ids):
         document = checkpoint.get_response(PERSON_URL + person_id) or {}
         person = next(
             (p for p in document.get("persons") or []
@@ -487,11 +487,11 @@ def collect_reports(checkpoint):
     }
 
 
-def export_reports(checkpoint, output):
-    """Optional legacy CSV export with a persistent manual review checklist."""
+def export_reports(checkpoint, output, selected_ids=None):
+    """Optional CSV export for the requested people and a review checklist."""
     output = Path(output).expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
-    data = collect_reports(checkpoint)
+    data = collect_reports(checkpoint, selected_ids=selected_ids)
     people = data["people"]
     events = data["events"]
     relationships = data["relationships"]
