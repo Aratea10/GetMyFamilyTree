@@ -219,6 +219,82 @@ class CompleteFamilyTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_export_includes_events_sources_notes_and_memory_links(self):
+        class SessionWithDetails(FakeSession):
+            def __init__(self):
+                super().__init__()
+                self.records["AAAA-111"] = {
+                    "persons": [{
+                        "id": "AAAA-111",
+                        "living": False,
+                        "names": [],
+                        "facts": [{
+                            "type": "http://gedcomx.org/Birth",
+                            "date": {"original": "1 JAN 1900"},
+                            "place": {"original": "Galicia"},
+                            "attribution": {},
+                        }],
+                        "sources": [{"descriptionId": "S01"}],
+                        "evidence": [{"id": "M1234-1"}],
+                    }]
+                }
+
+            def get_url(self, url, headers=None, no_api=False):
+                if url == "/platform/tree/persons/AAAA-111/sources":
+                    return {
+                        "persons": [{"sources": [{
+                            "descriptionId": "S01",
+                            "attribution": {},
+                        }]}],
+                        "sourceDescriptions": [{
+                            "id": "S01",
+                            "titles": [{"value": "Birth certificate"}],
+                            "citations": [{"value": "Registry office"}],
+                        }],
+                    }
+                if url == "/platform/tree/persons/AAAA-111/notes":
+                    return {
+                        "persons": [{"notes": [{
+                            "subject": "Research note",
+                            "text": "Original note text",
+                        }]}]
+                    }
+                if url == "/platform/memories/memories/M1234":
+                    return {
+                        "sourceDescriptions": [{
+                            "mediaType": "image/jpeg",
+                            "links": {},
+                            "about": "https://example.org/memory",
+                            "titles": [{"value": "Historical photo"}],
+                        }]
+                    }
+                return super().get_url(url, headers, no_api)
+
+        with tempfile.TemporaryDirectory() as folder:
+            store = Checkpoint(Path(folder) / "family.sqlite")
+            session = SessionWithDetails()
+            try:
+                store.seed(["AAAA-111"])
+                self.assertFalse(crawl(store, session, max_people=1, progress=0))
+                output = Path(folder) / "details.ged"
+                assemble(store, session, output, workers=1, no_contributors=True)
+                gedcom = output.read_text(encoding="utf-8")
+                for field in (
+                    "1 BIRT", "2 DATE 1 JAN 1900", "2 PLAC Galicia",
+                    "Birth certificate", "Registry office",
+                    "Original note text", "Historical photo",
+                    "https://example.org/memory",
+                ):
+                    self.assertIn(field, gedcom)
+                self.assertIsNotNone(store.get_response(
+                    "0::/platform/tree/persons/AAAA-111/sources"
+                ))
+                self.assertIsNotNone(store.get_response(
+                    "0::/platform/tree/persons/AAAA-111/notes"
+                ))
+            finally:
+                store.close()
+
     def test_gedcom_relationships_across_large_batches(self):
         with tempfile.TemporaryDirectory() as folder:
             store = Checkpoint(Path(folder) / "family.sqlite")
