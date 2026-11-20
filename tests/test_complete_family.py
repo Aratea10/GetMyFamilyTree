@@ -275,7 +275,7 @@ class CompleteFamilyTests(unittest.TestCase):
             session = SessionWithDetails()
             try:
                 store.seed(["AAAA-111"])
-                self.assertFalse(crawl(store, session, max_people=1, progress=0))
+                self.assertTrue(crawl(store, session, max_people=1, progress=0))
                 output = Path(folder) / "details.ged"
                 assemble(store, session, output, workers=1, no_contributors=True)
                 gedcom = output.read_text(encoding="utf-8")
