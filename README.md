@@ -71,17 +71,21 @@ Python 3.12 through uv. They do not require cloning this repository.
 **macOS and Linux** (save to Downloads):
 
 ```sh
-uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i XXXX-XXX -o ~/Downloads/GetMyFamilyTree.ged
+uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i XXXX-XXX -o ~/Downloads/GetMyFamilyTree
 ```
 
 **Windows PowerShell** (save to Downloads):
 
 ```powershell
-uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i XXXX-XXX -o "$HOME\Downloads\GetMyFamilyTree.ged"
+uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i XXXX-XXX -o "$HOME\Downloads\GetMyFamilyTree"
 ```
 
-Replace `XXXX-XXX` with your own FamilySearch person ID. On all platforms
-you can instead use `-o GetMyFamilyTree.ged` to save to the current directory.
+Replace `XXXX-XXX` with your own FamilySearch person ID. The `-o`
+parameter now accepts a **folder path** (recommended), automatically creating
+`GetMyFamilyTree.ged`, `GetMyFamilyTree.sqlite`, and
+`GetMyFamilyTree.md` inside it. You can still pass an explicit `.ged`
+filename for compatibility with older commands, but those files will then
+appear beside that filename rather than in a dedicated folder.
 
 To display all options without starting a download:
 
@@ -104,7 +108,7 @@ Linux secret store).
 For example, from a cloned project with uv:
 
 ```sh
-uv run getmyfamilytree -i XXXX-XXX --remember-login --max-people 100 -o ~/Downloads/GetMyFamilyTree.ged
+uv run getmyfamilytree -i XXXX-XXX --remember-login --max-people 100 -o ~/Downloads/GetMyFamilyTree
 ```
 
 After a successful login, later runs automatically reuse those saved credentials
@@ -136,7 +140,7 @@ other languages fall back to English.
 To choose Spanish explicitly:
 
 ```sh
-uv run getmyfamilytree -i XXXX-XXX --language es --max-people 200 -o ~/Downloads/GetMyFamilyTree.ged
+uv run getmyfamilytree -i XXXX-XXX --language es --max-people 200 -o ~/Downloads/GetMyFamilyTree
 ```
 
 To choose English, use `--language en`. The shorter option
@@ -170,73 +174,73 @@ To reduce terminal output for large downloads, use
 tracks successful explorations, not the total size of the worldwide family
 tree; newly found connections can increase the number still queued.
 
-The command creates an SQLite checkpoint beside the GEDCOM (same filename with `.sqlite` suffix). Running with the same `-o` path resumes using that checkpoint, rather than starting from scratch. Use Ctrl+C to request an orderly pause and a GEDCOM snapshot.
+The command creates a SQLite checkpoint beside the GEDCOM (same filename with `.sqlite` suffix). Running with the same `-o` path resumes using that checkpoint rather than starting from scratch. Use Ctrl+C to request an orderly pause and a GEDCOM snapshot.
 
 The downloaded GEDCOM and SQLite checkpoint can contain **private family information**. Keep both locally and out of public Git repositories.
 
-## Review your records by year (CSV)
+## Review one person at a time
 
-Every completed download also generates **readable CSV files** next to the
-GEDCOM. These are plain-text tables that can be opened in **Numbers, Excel,
-LibreOffice Calc, VS Code, or Python**. They are designed for checking
-genealogical records at your own pace without exploring one more FamilySearch
-branch.
+By default the program creates one **readable Markdown document** with an
+overview of every person and their available **events, relationships, sources,
+notes, and memories**. It opens as plain text in any code editor and as a
+nicely formatted document in a Markdown preview.
 
-| File | Contents |
-| --- | --- |
-| `GetMyFamilyTree.people.csv` | FamilySearch IDs, names, gender, living status and profile links |
-| `GetMyFamilyTree.events.csv` | Individual facts in chronological order, with year, original date, formal date, place, sources and stable event keys |
-| `GetMyFamilyTree.relationships.csv` | Parent/child and couple relationships with their FamilySearch IDs |
-| `GetMyFamilyTree.sources.csv` | Source titles, citations, available URLs, source notes, and the person or couple they belong to |
-| `GetMyFamilyTree.notes.csv` | Person, couple and source notes with the related IDs |
-| `GetMyFamilyTree.memories.csv` | Available memory titles, types and links associated with each person |
-| `GetMyFamilyTree.review.csv` | A separate checklist: `event_key`, `verified`, and `notes` |
+With a recommended folder destination, the export looks like this:
 
-The source, note, and memory tables use **the data already retrieved and
-cached during GEDCOM export**. The source file shows which person or couple a
-citation belongs to; that does not automatically prove every fact of the
-person. The events table keeps source references present on each individual
-fact. If a source cannot be retrieved, its reference remains visible with
-`details_available=False`, rather than inventing a title or citation.
-Memory links do not download the original image files.
+```text
+Downloads/
+└── GetMyFamilyTree/
+    ├── GetMyFamilyTree.ged
+    ├── GetMyFamilyTree.sqlite
+    └── GetMyFamilyTree.md
+```
 
-The `events.csv` table is sorted by **year**, with undated and range-based
-events at the end. Each row includes `date_status`, so approximate years and
-ambiguous numeric dates are never presented as definitely exact. A range such
-as 1900–1910 is not reduced to an invented single year. The original
-FamilySearch date stays visible.
+The Markdown file contains a **chronological index** for finding events by
+year. Below it, individuals are ordered by their birth year (when known).
+Each individual has **one section** containing their own events (sorted by
+year), parents/children/partners, source citations and links, notes, and
+references to memories. Relationship sources appear next to the relevant
+partner relationship. Unknown or uncertain dates are kept as originally
+received, never silently assigned a precise year.
 
-**The generated people, events and relationships tables are refreshed on each
-export.** Do not write personal annotations in those three files. Instead,
-use the `verified` and `notes` columns of `review.csv`: existing annotations
-are preserved when the tables are regenerated, and newly discovered events
-are appended. Keep a separate backup of your work.
+You can check items in the person's **My review / Mi revisión** section and
+write additional comments there. That section is preserved when the document
+is regenerated; newly found events receive new checklist entries. **Only
+edit notes inside the marked personal review section**: the remaining
+generated text will be refreshed from the local database.
 
-### Generate the tables without downloading again
+### Regenerate the document without downloading anything
 
-If you already have a `GetMyFamilyTree.sqlite` checkpoint, you can regenerate
-the CSV files **offline**, without logging into FamilySearch:
+After a previous download has created the SQLite file:
 
 ```sh
-uv run getmyfamilytree --report-only --language es -o ~/Downloads/GetMyFamilyTree.ged
+uv run getmyfamilytree --report-only --language es -o ~/Downloads/GetMyFamilyTree
 ```
 
-Windows PowerShell:
+On Windows PowerShell, use
+`-o "$HOME\Downloads\GetMyFamilyTree"`. Report-only mode needs neither
+FamilySearch credentials nor a person ID; it does not alter the GEDCOM.
 
-```powershell
-uv run getmyfamilytree --report-only --language en -o "$HOME\Downloads\GetMyFamilyTree.ged"
+### Optional: export CSV tables too
+
+If you need to sort or filter the underlying tabular information in Numbers,
+Excel or LibreOffice Calc, use `--csv`:
+
+```sh
+uv run getmyfamilytree --report-only --csv --language es -o ~/Downloads/GetMyFamilyTree
 ```
 
-The `-o` option identifies the existing SQLite checkpoint and determines
-where the CSVs will be written; the GEDCOM itself is not altered in report-only
-mode. No person ID is needed. You can open the CSVs as text or sort/filter the
-`year`, `date_status`, `person_id` and `event_type` columns.
+This additionally generates the seven CSV tables: people, events,
+relationships, sources, notes, memories, and a separate persistent
+review checklist. **They are no longer generated by default.** CSV tables
+are optional; the GEDCOM, SQLite checkpoint and person-by-person Markdown
+are enough for normal use.
 
-These files may include **living people's personal information** and should
-remain private. For spreadsheet safety, untrusted text beginning with a
-formula character is prefixed with an apostrophe in CSV; unmodified responses
-remain in the private SQLite checkpoint. The report supplements the GEDCOM;
-it does not replace original documents or independent source verification.
+These reports can contain private details about living relatives. Keep the
+entire output folder private and do not commit it to public repositories.
+The program can only report FamilySearch details that were actually
+accessible and cached; a source attached to a person does not automatically
+prove every fact in that person's record.
 
 ## Limitations
 
