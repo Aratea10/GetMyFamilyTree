@@ -87,8 +87,13 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
     output = Path(output).expanduser()
     report = output.with_suffix(".md")
     report.parent.mkdir(parents=True, exist_ok=True)
+    # Capture hand-written checks before replacing the Markdown file. This
+    # remains safe even when the next scope omits the people being reviewed.
+    written_reviews = _saved_reviews(report)
+    if written_reviews:
+        checkpoint.save_review_notes(written_reviews)
+    saved = checkpoint.load_review_notes()
     data = collect_reports(checkpoint, selected_ids=selected_ids)
-    saved = _saved_reviews(report)
     es = language == "es"
 
     people = data["people"]
