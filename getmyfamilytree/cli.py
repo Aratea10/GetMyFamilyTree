@@ -21,6 +21,7 @@ from getmyancestors.classes.tree import Tree
 from getmyfamilytree.credentials import CredentialStore, CredentialStoreError
 from getmyfamilytree.i18n import resolve_language, translate
 from getmyfamilytree.reports import export_reports
+from getmyfamilytree.person_report import write_person_report
 
 PERSON_URL = "/platform/tree/persons?pids="
 FAMILIES_URL = "/platform/tree/persons/{}/families"
@@ -439,6 +440,16 @@ def assemble(
     return len(tree.indi), len(tree.fam)
 
 
+def resolve_output_path(destination):
+    """Accept either an explicit .ged file or a folder for a new export."""
+    destination = Path(destination).expanduser()
+    if destination.suffix.lower() == ".ged":
+        return destination
+    if destination.suffix:
+        raise ValueError("Expected a .ged filename or a folder path")
+    return destination / "GetMyFamilyTree.ged"
+
+
 def main(argv=None):
     # Read the language before constructing the translated argparse help.
     language_parser = argparse.ArgumentParser(add_help=False)
@@ -481,6 +492,9 @@ def main(argv=None):
         "--report-only", action="store_true", help=tr("help_report_only")
     )
     parser.add_argument(
+        "--csv", action="store_true", help=tr("help_csv")
+    )
+    parser.add_argument(
         "--no-notes", action="store_true", help=tr("help_no_notes")
     )
     parser.add_argument(
@@ -505,34 +519,39 @@ def main(argv=None):
         print(tr("saved_removed" if removed else "saved_not_found"))
         return
 
+    if not args.output:
+        parser.error(
+            tr("error_report_requires_output") if args.report_only
+            else tr("error_required")
+        )
+    try:
+        output_path = resolve_output_path(args.output)
+    except ValueError:
+        parser.error(tr("error_output_path"))
+
+    checkpoint_path = args.database or output_path.with_suffix(".sqlite")
     if args.report_only:
-        if not args.output:
-            parser.error(tr("error_report_requires_output"))
-        report_database = args.database or args.output.with_suffix(".sqlite")
-        if not report_database.expanduser().is_file():
-            parser.error(tr("error_report_database_missing", path=report_database))
-        report_checkpoint = Checkpoint(report_database)
+        if not checkpoint_path.expanduser().is_file():
+            parser.error(tr("error_report_database_missing", path=checkpoint_path))
+        report_checkpoint = Checkpoint(checkpoint_path)
         try:
-            result = export_reports(report_checkpoint, args.output)
+            result = write_person_report(
+                report_checkpoint, output_path, language=language
+            )
+            if args.csv:
+                export_reports(report_checkpoint, output_path)
         finally:
             report_checkpoint.close()
-        print(
-            tr("report_saved", events=result["events"], people=result["people"],
-               sources=result["sources"], notes=result["notes"],
-               memories=result["memories"], path=result["paths"]["events"]),
-        )
-        print(
-            tr("report_review", path=result["paths"]["review"]),
-        )
+        print(tr("person_report_saved", people=result["people"],
+                 events=result["events"], path=result["path"]))
         return
-    if not args.individual or not args.output:
+
+    if not args.individual:
         parser.error(tr("error_required"))
     if not PERSON_ID.fullmatch(args.individual):
         parser.error(tr("error_invalid_id"))
     if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
         parser.error(tr("error_invalid_limits"))
-
-    checkpoint_path = args.database or args.output.with_suffix(".sqlite")
     checkpoint = Checkpoint(checkpoint_path)
     try:
         try:
@@ -593,27 +612,24 @@ def main(argv=None):
             file=sys.stderr, flush=True,
         )
         n, families = assemble(
-            checkpoint, session, args.output,
+            checkpoint, session, output_path,
             no_notes=args.no_notes, no_sources=args.no_sources,
             no_memories=args.no_memories,
             no_contributors=args.no_contributors,
         )
-        report = export_reports(checkpoint, args.output)
+        report = write_person_report(checkpoint, output_path, language=language)
+        if args.csv:
+            export_reports(checkpoint, output_path)
         print(
-            tr("report_saved", events=report["events"], people=report["people"],
-               sources=report["sources"], notes=report["notes"],
-               memories=report["memories"], path=report["paths"]["events"]),
-            file=sys.stderr,
-        )
-        print(
-            tr("report_review", path=report["paths"]["review"]),
+            tr("person_report_saved", people=report["people"],
+               events=report["events"], path=report["path"]),
             file=sys.stderr,
         )
         pending = checkpoint.count("pending")
         failed = checkpoint.count("failed")
         print(
             tr("saved_tree", people=n, families=families,
-               path=args.output, pending=pending, failed=failed),
+               path=output_path, pending=pending, failed=failed),
             file=sys.stderr,
         )
         if not exhausted:
