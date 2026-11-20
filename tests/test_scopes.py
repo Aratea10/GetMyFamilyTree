@@ -8,7 +8,7 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
-from getmyfamilytree.cli import Checkpoint, main
+from getmyfamilytree.cli import Checkpoint, assemble, main
 from getmyfamilytree.reports import collect_reports
 from getmyfamilytree.scopes import crawl_scope
 
@@ -174,6 +174,29 @@ class ScopeTests(unittest.TestCase):
         self.assertTrue(later.exhausted)
         root = "/platform/tree/persons?pids=AAAA-111"
         self.assertEqual(self.session.calls.count(root), 1)
+
+    def test_gedcom_export_includes_only_selected_ancestors(self):
+        self.run_scope("full")
+        selected = self.run_scope(
+            "ancestors", generations=1, offline=True,
+        ).ids
+        output = Path(self.tmp.name) / "ancestors.ged"
+        people, _ = assemble(
+            self.checkpoint, self.session, output,
+            no_sources=True, no_notes=True, no_memories=True,
+            no_contributors=True, selected_ids=selected,
+        )
+        gedcom = output.read_text(encoding="utf-8")
+        self.assertEqual(people, 3)
+        self.assertEqual(
+            sum(line.endswith(" INDI") for line in gedcom.splitlines()),
+            3,
+        )
+        self.assertIn("1 _FSFTID AAAA-111", gedcom)
+        self.assertIn("1 _FSFTID BBBB-222", gedcom)
+        self.assertIn("1 _FSFTID CCCC-333", gedcom)
+        self.assertNotIn("1 _FSFTID EEEE-555", gedcom)
+        self.assertNotIn("1 _FSFTID FFFF-666", gedcom)
 
     def test_people_outside_scope_do_not_enter_report(self):
         self.run_scope("full")
