@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from getmyfamilytree.cli import Checkpoint, crawl, main
+from getmyfamilytree.scopes import ScopeResult
 from getmyfamilytree.i18n import MESSAGES, resolve_language, translate
 
 
@@ -100,8 +101,12 @@ class TranslationTests(unittest.TestCase):
                       return_value=fake_credentials),
                 patch("getmyfamilytree.cli.Session",
                       return_value=fake_session),
-                patch("getmyfamilytree.cli.crawl",
-                      return_value=True) as fake_crawl,
+                patch(
+                    "getmyfamilytree.cli.crawl_scope",
+                    return_value=ScopeResult(
+                        ids=[], pending=0, failed=0, exhausted=True, reused=0
+                    ),
+                ) as fake_crawl,
                 patch("getmyfamilytree.cli.assemble",
                       return_value=(1, 0)),
                 redirect_stderr(output),
