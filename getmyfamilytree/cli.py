@@ -19,6 +19,7 @@ from threading import RLock
 from getmyancestors.classes.session import Session
 from getmyancestors.classes.tree import Tree
 from getmyfamilytree.credentials import CredentialStore, CredentialStoreError
+from getmyfamilytree.i18n import resolve_language, translate
 
 PERSON_URL = "/platform/tree/persons?pids="
 FAMILIES_URL = "/platform/tree/persons/{}/families"
@@ -101,7 +102,7 @@ class Checkpoint:
         with self.lock:
             self.connection.close()
 
-    def set_origin(self, identifier):
+    def set_origin(self, identifier, language="en"):
         """Reject a checkpoint belonging to a different starting person."""
         with self.lock, self.connection:
             row = self.connection.execute(
@@ -109,8 +110,8 @@ class Checkpoint:
             ).fetchone()
             if row and row[0] != identifier:
                 raise ValueError(
-                    f"Checkpoint belongs to {row[0]}, not {identifier}. "
-                    "Choose a different output or database filename."
+                    translate(language, "error_checkpoint_origin",
+                              existing=row[0], requested=identifier)
                 )
             self.connection.execute(
                 "INSERT OR IGNORE INTO metadata(key, value) VALUES ('origin', ?)",
@@ -185,7 +186,7 @@ class Checkpoint:
             )
 
 
-def crawl(checkpoint, session, max_people=1000, progress=1):
+def crawl(checkpoint, session, max_people=1000, progress=1, language="en"):
     """Explore reachable people and report each completed person by default.
 
     max_people=0 removes the person cap; progress=0 silences progress messages.
@@ -193,10 +194,9 @@ def crawl(checkpoint, session, max_people=1000, progress=1):
     done = checkpoint.count("done")
     pending = checkpoint.count("pending")
     if progress:
-        limit = str(max_people) if max_people else "unlimited"
+        limit = str(max_people) if max_people else translate(language, "unlimited")
         print(
-            f"Starting exploration: {done} already explored, "
-            f"{pending} queued, limit {limit}.",
+            translate(language, "start", done=done, pending=pending, limit=limit),
             file=sys.stderr, flush=True,
         )
 
@@ -207,9 +207,8 @@ def crawl(checkpoint, session, max_people=1000, progress=1):
         report = bool(progress and (done + 1) % progress == 0)
         if report:
             print(
-                f"Exploring {done + 1}"
-                + (f"/{max_people}" if max_people else "")
-                + f": {fid}...",
+                translate(language, "exploring", position=done + 1,
+                          total=f"/{max_people}" if max_people else "", fid=fid),
                 file=sys.stderr, flush=True,
             )
 
@@ -224,7 +223,7 @@ def crawl(checkpoint, session, max_people=1000, progress=1):
         ):
             checkpoint.fail(fid)
             print(
-                f"Could not retrieve {fid}; will retry on a future run.",
+                translate(language, "retrieval_failed", fid=fid),
                 file=sys.stderr, flush=True,
             )
             continue
@@ -243,19 +242,21 @@ def crawl(checkpoint, session, max_people=1000, progress=1):
         done += 1
         if report:
             print(
-                f"Found: {person_display_name(document, fid)} ({fid}) | "
-                f"+{added} new relatives | "
-                f"{checkpoint.count('pending')} queued.",
+                translate(language, "found", name=person_display_name(document, fid),
+                          fid=fid, added=added,
+                          pending=checkpoint.count("pending")),
                 file=sys.stderr, flush=True,
             )
+    pending = checkpoint.count("pending")
+    failed = checkpoint.count("failed")
+    complete = pending == 0 and failed == 0
     if progress:
         print(
-            f"Exploration paused: {done} explored, "
-            f"{checkpoint.count('pending')} queued, "
-            f"{checkpoint.count('failed')} unavailable.",
+            translate(language, "complete" if complete else "paused",
+                      done=done, pending=pending, failed=failed),
             file=sys.stderr, flush=True,
         )
-    return checkpoint.count("pending") == 0 and checkpoint.count("failed") == 0
+    return complete
 
 
 def _combined_documents(documents):
