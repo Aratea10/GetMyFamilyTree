@@ -322,7 +322,16 @@ class ReplaySession:
                 if document is None:
                     raise RuntimeError(f"Missing cached person {fid}")
                 documents.append(document)
-            return _combined_documents(documents)
+            combined = _combined_documents(documents)
+            # A FamilySearch response can include additional relatives whose
+            # profiles were not requested. Do not silently export them when
+            # the user selected a bounded generation or family scope.
+            chosen = set(ids)
+            combined["persons"] = [
+                person for person in combined["persons"]
+                if person.get("id") in chosen
+            ]
+            return combined
 
         accept = headers.get("Accept", "") if headers else ""
         key = f"{int(no_api)}:{accept}:{url}"
