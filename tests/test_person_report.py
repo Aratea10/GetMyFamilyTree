@@ -143,6 +143,34 @@ class PersonReviewTests(unittest.TestCase):
         self.assertEqual(new_text.count("Comprobado con la partida original."), 1)
         self.assertEqual(new_text.count("AAAA-111:residence"), 2)
 
+    def test_review_notes_survive_switching_scopes(self):
+        # Start with both people, then export one, then restore both.
+        path = write_person_report(self.store, self.output, "es")["path"]
+        text = path.read_text(encoding="utf-8")
+        text = text.replace(
+            "<!-- review:start BBBB-222 -->\n",
+            "<!-- review:start BBBB-222 -->\n"
+            "He comprobado el registro de José.\n",
+        )
+        path.write_text(text, encoding="utf-8")
+
+        write_person_report(
+            self.store, self.output, "es", selected_ids=["AAAA-111"]
+        )
+        limited = path.read_text(encoding="utf-8")
+        self.assertNotIn("He comprobado el registro de José.", limited)
+
+        write_person_report(
+            self.store, self.output, "es",
+            selected_ids=["AAAA-111", "BBBB-222"],
+        )
+        restored = path.read_text(encoding="utf-8")
+        self.assertIn("He comprobado el registro de José.", restored)
+        self.assertEqual(
+            self.store.load_review_notes()["BBBB-222"].strip(),
+            "He comprobado el registro de José.",
+        )
+
     def test_english_language_does_not_change_person_data(self):
         text = write_person_report(self.store, self.output, "en")[
             "path"
