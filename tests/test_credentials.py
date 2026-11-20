@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from getmyfamilytree.cli import main
+from getmyfamilytree.scopes import ScopeResult
 from getmyfamilytree.credentials import (
     CredentialStore,
     SERVICE,
@@ -72,7 +73,12 @@ class LoginFlowTests(unittest.TestCase):
             with (
                 patch("getmyfamilytree.cli.CredentialStore", return_value=store),
                 patch("getmyfamilytree.cli.Session", return_value=session) as session_factory,
-                patch("getmyfamilytree.cli.crawl", return_value=True),
+                patch(
+                    "getmyfamilytree.cli.crawl_scope",
+                    return_value=ScopeResult(
+                        ids=[], pending=0, failed=0, exhausted=True, reused=0
+                    ),
+                ),
                 patch("getmyfamilytree.cli.assemble", return_value=(1, 0)),
                 patch("builtins.input", side_effect=username_prompt or AssertionError("Username prompt not expected")),
                 patch("getmyfamilytree.cli.getpass.getpass", side_effect=password_prompt or AssertionError("Password prompt not expected")),
