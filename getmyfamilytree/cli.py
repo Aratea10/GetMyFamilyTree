@@ -312,13 +312,31 @@ def assemble(
         for parent in (father, mother)
         if parent
     }
+    fallback_families = {}
     for parent, child in sorted(parent_child_edges):
         if (parent, child) in full_parent_edges:
             continue
-        if tree.indi[parent].gender == "F":
-            tree.add_trio(None, parent, child)
+        gender = tree.indi[parent].gender
+        if gender not in {"M", "F"}:
+            # The relationship is retained in SQLite; do not silently
+            # invent a father/mother role for a person of unknown sex.
+            continue
+        role = "father" if gender == "M" else "mother"
+        roles = fallback_families.setdefault(child, {})
+        roles.setdefault(role, set()).add(parent)
+
+    for child, roles in sorted(fallback_families.items()):
+        fathers = roles.get("father", set())
+        mothers = roles.get("mother", set())
+        # Multiple partners cannot be safely paired without an explicit
+        # ChildAndParents relationship. Keep those parents separate.
+        if len(fathers) == 1 and len(mothers) == 1:
+            tree.add_trio(next(iter(fathers)), next(iter(mothers)), child)
         else:
-            tree.add_trio(parent, None, child)
+            for father in sorted(fathers):
+                tree.add_trio(father, None, child)
+            for mother in sorted(mothers):
+                tree.add_trio(None, mother, child)
 
     for first, second, relationship_id in couple_links.values():
         if (first, second) in tree.fam:
