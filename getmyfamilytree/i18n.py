@@ -23,7 +23,8 @@ MESSAGES = {
         "error_report_requires_output": "--report-only requires -o/--output",
         "error_report_database_missing": "Saved checkpoint not found: {path}",
         "report_saved": (
-            "Created review tables for {people} people and {events} events: {path}"
+            "Created review tables for {people} people, {events} events, "
+            "{sources} source links, {notes} notes, and {memories} memory links: {path}"
         ),
         "report_review": "Review checklist (annotations preserved): {path}",
         "help_no_notes": "Do not download notes",
@@ -99,7 +100,8 @@ MESSAGES = {
         "error_report_requires_output": "--report-only necesita -o/--output",
         "error_report_database_missing": "No se encuentra el progreso guardado: {path}",
         "report_saved": (
-            "Creadas tablas de revisión para {people} personas y {events} acontecimientos: {path}"
+            "Creadas tablas de revisión para {people} personas, {events} acontecimientos, "
+            "{sources} referencias de fuentes, {notes} notas y {memories} recuerdos: {path}"
         ),
         "report_review": "Lista de verificación (anotaciones conservadas): {path}",
         "help_no_notes": "No descargar notas",
