@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 from getmyfamilytree.cli import main
 from getmyfamilytree.credentials import (
     CredentialStore,
-    CredentialStoreError,
     SERVICE,
     USERNAME_ENTRY,
 )
@@ -46,6 +45,12 @@ class CredentialStoreTests(unittest.TestCase):
         self.assertEqual(
             self.backend.entries[SERVICE, "example-user"], "example-password"
         )
+
+    def test_switching_accounts_removes_previous_password(self):
+        self.store.save("first-user", "first-password")
+        self.store.save("second-user", "second-password")
+        self.assertEqual(self.store.load(), ("second-user", "second-password"))
+        self.assertNotIn((SERVICE, "first-user"), self.backend.entries)
 
     def test_removes_both_saved_entries(self):
         self.store.save("example-user", "example-password")
