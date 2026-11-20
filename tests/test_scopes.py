@@ -112,6 +112,32 @@ class ScopeTests(unittest.TestCase):
                 max_people=max_people, progress=0,
             )
 
+    def test_child_and_parents_relationships_are_directional(self):
+        class FamilyOnly:
+            def get_url(self, url, headers=None, no_api=False):
+                if url.endswith("/families"):
+                    return {"persons": [], "relationships": []}
+                person_id = url.split("pids=", 1)[-1]
+                relations = []
+                if person_id == "AAAA-111":
+                    relations = [{
+                        "id": "parents-1",
+                        "child": {"resourceId": "AAAA-111"},
+                        "parent1": {"resourceId": "BBBB-222"},
+                        "parent2": {"resourceId": "CCCC-333"},
+                    }]
+                return {
+                    "persons": [{"id": person_id, "living": False, "names": []}],
+                    "childAndParentsRelationships": relations,
+                }
+        result = crawl_scope(
+            self.checkpoint, FamilyOnly(), "AAAA-111",
+            scope="ancestors", generations=1, progress=0,
+        )
+        self.assertEqual(
+            set(result.ids), {"AAAA-111", "BBBB-222", "CCCC-333"}
+        )
+
     def test_ancestors_have_only_paternal_and_maternal_lines(self):
         ids = set(self.run_scope("ancestors", generations=1).ids)
         self.assertEqual(ids, {"AAAA-111", "BBBB-222", "CCCC-333"})
