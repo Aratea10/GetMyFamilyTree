@@ -323,10 +323,8 @@ def _review_rows(path):
         }
 
 
-def export_reports(checkpoint, output):
-    """Create sorted people/events/relationships CSVs plus a safe review log."""
-    output = Path(output).expanduser()
-    output.parent.mkdir(parents=True, exist_ok=True)
+def collect_reports(checkpoint):
+    """Collect all cached genealogy data without writing any files."""
     people = []
     events = []
     relations = {}
@@ -479,6 +477,27 @@ def export_reports(checkpoint, output):
         row["person_name"].casefold(), row["memory_key"],
     ))
 
+    return {
+        "people": people,
+        "events": events,
+        "relationships": relationships,
+        "sources": sources,
+        "notes": notes,
+        "memories": memories,
+    }
+
+
+def export_reports(checkpoint, output):
+    """Optional legacy CSV export with a persistent manual review checklist."""
+    output = Path(output).expanduser()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    data = collect_reports(checkpoint)
+    people = data["people"]
+    events = data["events"]
+    relationships = data["relationships"]
+    sources = data["sources"]
+    notes = data["notes"]
+    memories = data["memories"]
     paths = {
         "people": output.with_suffix(".people.csv"),
         "events": output.with_suffix(".events.csv"),
@@ -488,7 +507,7 @@ def export_reports(checkpoint, output):
         "memories": output.with_suffix(".memories.csv"),
         "review": output.with_suffix(".review.csv"),
     }
-    # Validate a pre-existing review file *before* replacing any generated CSV.
+    # Validate the manual review file before touching generated reports.
     reviews = _review_rows(paths["review"])
     for event in events:
         reviews.setdefault(event["event_key"], {
