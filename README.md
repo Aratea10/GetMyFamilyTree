@@ -1,5 +1,11 @@
 # GetMyFamilyTree
 
+<div align="center">
+
+[![Python](https://img.shields.io/badge/python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+
+</div>
+
 Explore your extended FamilySearch family tree in every direction and export it to GEDCOM.
 
 **Independent, unofficial community project.** This tool is not affiliated with or endorsed by FamilySearch.
