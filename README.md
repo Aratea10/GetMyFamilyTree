@@ -174,6 +174,59 @@ The command creates an SQLite checkpoint beside the GEDCOM (same filename with `
 
 The downloaded GEDCOM and SQLite checkpoint can contain **private family information**. Keep both locally and out of public Git repositories.
 
+## Review your records by year (CSV)
+
+Every completed download also generates **readable CSV files** next to the
+GEDCOM. These are plain-text tables that can be opened in **Numbers, Excel,
+LibreOffice Calc, VS Code, or Python**. They are designed for checking
+genealogical records at your own pace without exploring one more FamilySearch
+branch.
+
+| File | Contents |
+| --- | --- |
+| `GetMyFamilyTree.people.csv` | FamilySearch IDs, names, gender, living status and profile links |
+| `GetMyFamilyTree.events.csv` | Individual facts in chronological order, with year, original date, formal date, place, sources and stable event keys |
+| `GetMyFamilyTree.relationships.csv` | Parent/child and couple relationships with their FamilySearch IDs |
+| `GetMyFamilyTree.review.csv` | A separate checklist: `event_key`, `verified`, and `notes` |
+
+The `events.csv` table is sorted by **year**, with undated and range-based
+events at the end. Each row includes `date_status`, so approximate years and
+ambiguous numeric dates are never presented as definitely exact. A range such
+as 1900–1910 is not reduced to an invented single year. The original
+FamilySearch date stays visible.
+
+**The generated people, events and relationships tables are refreshed on each
+export.** Do not write personal annotations in those three files. Instead,
+use the `verified` and `notes` columns of `review.csv`: existing annotations
+are preserved when the tables are regenerated, and newly discovered events
+are appended. Keep a separate backup of your work.
+
+### Generate the tables without downloading again
+
+If you already have a `GetMyFamilyTree.sqlite` checkpoint, you can regenerate
+the CSV files **offline**, without logging into FamilySearch:
+
+```sh
+uv run getmyfamilytree --report-only --language es -o ~/Downloads/GetMyFamilyTree.ged
+```
+
+Windows PowerShell:
+
+```powershell
+uv run getmyfamilytree --report-only --language en -o "$HOME\Downloads\GetMyFamilyTree.ged"
+```
+
+The `-o` option identifies the existing SQLite checkpoint and determines
+where the CSVs will be written; the GEDCOM itself is not altered in report-only
+mode. No person ID is needed. You can open the CSVs as text or sort/filter the
+`year`, `date_status`, `person_id` and `event_type` columns.
+
+These files may include **living people's personal information** and should
+remain private. For spreadsheet safety, untrusted text beginning with a
+formula character is prefixed with an apostrophe in CSV; unmodified responses
+remain in the private SQLite checkpoint. The report supplements the GEDCOM;
+it does not replace original documents or independent source verification.
+
 ## Limitations
 
 - The GEDCOM export currently uses the original `getmyancestors` writer. It may not retain every API field or download source-document/media image bytes.
