@@ -127,6 +127,30 @@ secure keyring is available, the program will continue to ask for credentials.
 
 For safety, the first run pauses after **1,000 people**. That number is not a generation limit. Run the same command with `--max-people 5000` to explore more. If you deliberately want no person limit, pass `--max-people 0`; a large connected tree could run for a very long time and consume significant disk space and requests.
 
+### Language / Idioma
+
+The command-line interface supports **English** and **Spanish**. By default,
+`--language auto` uses the operating system's language when it is supported;
+other languages fall back to English.
+
+To choose Spanish explicitly:
+
+```sh
+uv run getmyfamilytree -i XXXX-XXX --language es --max-people 200 -o ~/Downloads/GetMyFamilyTree.ged
+```
+
+To choose English, use `--language en`. The shorter option
+`--lang es` also works. Help messages follow the selected language:
+
+```sh
+uv run getmyfamilytree --language es --help
+```
+
+**The language option changes only the terminal interface.** It does not
+translate the GEDCOM or alter names, dates, places, notes and other original
+FamilySearch data. GEDCOM record identifiers and date codes follow the
+GEDCOM standard regardless of the interface language.
+
 ### Live progress
 
 The terminal now reports progress **for every person** by default. As
