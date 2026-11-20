@@ -71,16 +71,16 @@ Python 3.12 through uv. They do not require cloning this repository.
 **macOS and Linux** (save to Downloads):
 
 ```sh
-uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i LVXP-TH5 -o ~/Downloads/GetMyFamilyTree.ged
+uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i XXXX-XXX -o ~/Downloads/GetMyFamilyTree.ged
 ```
 
 **Windows PowerShell** (save to Downloads):
 
 ```powershell
-uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i LVXP-TH5 -o "$HOME\Downloads\GetMyFamilyTree.ged"
+uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" getmyfamilytree -i XXXX-XXX -o "$HOME\Downloads\GetMyFamilyTree.ged"
 ```
 
-Replace `LVXP-TH5` with your own FamilySearch person ID. On all platforms
+Replace `XXXX-XXX` with your own FamilySearch person ID. On all platforms
 you can instead use `-o GetMyFamilyTree.ged` to save to the current directory.
 
 To display all options without starting a download:
@@ -104,7 +104,7 @@ Linux secret store).
 For example, from a cloned project with uv:
 
 ```sh
-uv run getmyfamilytree -i LVXP-TH5 --remember-login --max-people 100 -o ~/Downloads/GetMyFamilyTree.ged
+uv run getmyfamilytree -i XXXX-XXX --remember-login --max-people 100 -o ~/Downloads/GetMyFamilyTree.ged
 ```
 
 After a successful login, later runs automatically reuse those saved credentials
