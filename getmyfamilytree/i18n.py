@@ -2,6 +2,7 @@
 
 Use stable message keys rather than translating FamilySearch's original data.
 """
+
 from __future__ import annotations
 
 import locale
@@ -108,6 +109,22 @@ MESSAGES = {
             "Not yet exhaustive. Run the SAME command again to resume "
             "from the SQLite checkpoint."
         ),
+        "gedcom_loading_batch": (
+            "Processing people {start}-{end} of {total}..."
+        ),
+        "gedcom_people_progress": (
+            "People processed: {count}/{total}"
+        ),
+        "gedcom_extra_start": (
+            "Processing {total} additional tasks..."
+        ),
+        "gedcom_extra_progress": (
+            "Tasks completed: {count}/{total}"
+        ),
+        "gedcom_done": (
+            "GEDCOM successfully generated: {path}"
+        ),
+        "report_building": "Generating review document...",
     },
     "es": {
         "description": "Explora todos los familiares accesibles en FamilySearch en cualquier dirección.",
@@ -220,33 +237,75 @@ MESSAGES = {
             "Aún quedan familiares por explorar. Ejecuta el MISMO comando "
             "para continuar desde el archivo SQLite."
         ),
+        "gedcom_loading_batch": (
+            "Procesando personas {start}-{end} de {total}..."
+        ),
+        "gedcom_people_progress": (
+            "Personas procesadas: {count}/{total}"
+        ),
+        "gedcom_extra_start": (
+            "Procesando {total} tareas adicionales..."
+        ),
+        "gedcom_extra_progress": (
+            "Tareas completadas: {count}/{total}"
+        ),
+        "gedcom_done": (
+            "GEDCOM generado correctamente: {path}"
+        ),
+        "report_building": "Generando documento de revisión...",
     },
 }
 
 
-def resolve_language(requested="auto", system_locale=None):
+def resolve_language(
+    requested="auto", system_locale=None
+):
     """Choose English or Spanish without requiring installed locale catalogs."""
     if requested in ("en", "es"):
         return requested
     if requested != "auto":
-        raise ValueError(f"Unsupported interface language: {requested}")
+        raise ValueError(
+            f"Unsupported interface language: {requested}"
+        )
 
     if system_locale is None:
         system_locale = next(
-            (os.environ[name] for name in ("LC_ALL", "LC_MESSAGES", "LANG")
-             if os.environ.get(name)),
+            (
+                os.environ[name]
+                for name in (
+                    "LC_ALL",
+                    "LC_MESSAGES",
+                    "LANG",
+                )
+                if os.environ.get(name)
+            ),
             None,
         )
         if not system_locale:
-            system_locale = locale.getlocale()[0]
+            system_locale = (
+                locale.getlocale()[0]
+            )
 
-    code = str(system_locale or "").lower().replace("-", "_")
-    return "es" if code == "es" or code.startswith("es_") else "en"
+    code = (
+        str(system_locale or "")
+        .lower()
+        .replace("-", "_")
+    )
+    return (
+        "es"
+        if code == "es"
+        or code.startswith("es_")
+        else "en"
+    )
 
 
-def translate(language, message, **values):
+def translate(
+    language, message, **values
+):
     """Format a translated user-facing message with an English fallback."""
-    template = MESSAGES.get(language, MESSAGES["en"]).get(
+    template = MESSAGES.get(
+        language, MESSAGES["en"]
+    ).get(
         message, MESSAGES["en"][message]
     )
     return template.format(**values)
