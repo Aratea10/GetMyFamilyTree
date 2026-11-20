@@ -150,10 +150,10 @@ To choose English, use `--language en`. The shorter option
 uv run getmyfamilytree --language es --help
 ```
 
-**The language option changes only the terminal interface.** It does not
-translate the GEDCOM or alter names, dates, places, notes and other original
-FamilySearch data. GEDCOM record identifiers and date codes follow the
-GEDCOM standard regardless of the interface language.
+**The language option changes the terminal interface and headings in the
+Markdown review.** It does not translate the GEDCOM or alter names, dates,
+places, notes and other original FamilySearch data. GEDCOM record identifiers
+and date codes follow the GEDCOM standard regardless of the interface language.
 
 ### Live progress
 
