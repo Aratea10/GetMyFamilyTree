@@ -36,10 +36,16 @@ class CredentialStore:
     def save(self, username, password):
         """Save credentials only after a successful login and explicit opt-in."""
         try:
+            previous_user = self.backend.get_password(SERVICE, USERNAME_ENTRY)
             # Write the secret first. A missing account pointer is harmless;
             # a pointer to a missing secret triggers the normal login prompt.
             self.backend.set_password(SERVICE, username, password)
             self.backend.set_password(SERVICE, USERNAME_ENTRY, username)
+            if previous_user and previous_user != username:
+                try:
+                    self.backend.delete_password(SERVICE, previous_user)
+                except PasswordDeleteError:
+                    pass
         except KeyringError as exc:
             raise CredentialStoreError("Cannot save credentials in the system keyring.") from exc
 
