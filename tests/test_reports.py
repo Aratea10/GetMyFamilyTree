@@ -99,11 +99,14 @@ class ReviewExportTests(unittest.TestCase):
         )
         self.assertEqual(events[0]["date_status"], "ambiguous_day_month")
         self.assertEqual(events[0]["date_original"], "3/4/1888")
-        self.assertEqual(events[1]["date_formal"], "+1892-03-12")
+        self.assertEqual(events[1]["date_formal"], "'+1892-03-12")
         self.assertEqual(events[1]["person_name"], "María da Silva")
         self.assertEqual(events[1]["source_references"], "#source123")
         self.assertEqual(events[2]["date_status"], "approximate")
-        self.assertEqual(events[3]["date_status"], "range_or_relative")
+        self.assertCountEqual(
+            [event["date_status"] for event in events[3:]],
+            ["range_or_relative", "undated_or_unparsed"],
+        )
 
     def test_person_and_relationship_tables(self):
         result = export_reports(self.checkpoint, self.output)
