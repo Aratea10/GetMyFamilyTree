@@ -17,3 +17,12 @@ dist/
 *.sqlite3
 *.sqlite3-shm
 *.sqlite3-wal
+# Generated family research exports
+GetMyFamilyTree.md
+*.people.csv
+*.events.csv
+*.relationships.csv
+*.sources.csv
+*.notes.csv
+*.memories.csv
+*.review.csv
