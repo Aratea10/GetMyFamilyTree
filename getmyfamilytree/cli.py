@@ -282,11 +282,14 @@ def assemble(
     # Families may return a ParentChild link without a full
     # ChildAndParents relationship. Preserve such links if no matching
     # full relationship was found in the cached person responses.
+    full_parent_edges = {
+        (parent, child)
+        for father, mother, child in parent_links
+        for parent in (father, mother)
+        if parent
+    }
     for parent, child in sorted(parent_child_edges):
-        if any(
-            existing_child == child and parent in (father, mother)
-            for father, mother, existing_child in parent_links
-        ):
+        if (parent, child) in full_parent_edges:
             continue
         if tree.indi[parent].gender == "F":
             tree.add_trio(None, parent, child)
