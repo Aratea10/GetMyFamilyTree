@@ -1,6 +1,8 @@
 """Regression tests for complete family traversal (no FamilySearch login required)."""
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from getmyfamilytree.cli import (
@@ -8,6 +10,7 @@ from getmyfamilytree.cli import (
     ReplaySession,
     assemble,
     crawl,
+    person_display_name,
     related_people,
 )
 
@@ -63,6 +66,68 @@ class FakeSession:
 
 
 class CompleteFamilyTests(unittest.TestCase):
+    def test_person_display_name_prefers_familysearch_display(self):
+        document = {"persons": [
+            {"id": "AAAA-111", "display": {"name": "Maria   da   Silva"}},
+        ]}
+        self.assertEqual(
+            person_display_name(document, "AAAA-111"), "Maria da Silva"
+        )
+
+    def test_person_display_name_accepts_gedcomx_full_text(self):
+        document = {"persons": [
+            {"id": "AAAA-111", "names": [{
+                "nameForms": [{"fullText": "Ana Goncalves"}]
+            }]}
+        ]}
+        self.assertEqual(
+            person_display_name(document, "AAAA-111"), "Ana Goncalves"
+        )
+        self.assertEqual(
+            person_display_name(document, "BBBB-222"), "BBBB-222"
+        )
+
+    def test_every_person_is_reported_by_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Checkpoint(Path(directory) / "family.sqlite")
+            session = FakeSession()
+            session.records["AAAA-111"]["persons"][0]["display"] = {
+                "name": "Maria Example"
+            }
+            try:
+                checkpoint.seed(["AAAA-111"])
+                output = io.StringIO()
+                with redirect_stderr(output):
+                    self.assertFalse(
+                        crawl(checkpoint, session, max_people=2)
+                    )
+                progress = output.getvalue()
+                self.assertIn("Starting exploration: 0 already explored", progress)
+                self.assertIn("Exploring 1/2: AAAA-111...", progress)
+                self.assertIn(
+                    "Found: Maria Example (AAAA-111) | +1 new relatives",
+                    progress,
+                )
+                self.assertIn("Exploring 2/2: BBBB-222...", progress)
+                self.assertIn("2 explored", progress)
+                self.assertIn("1 queued", progress)
+            finally:
+                checkpoint.close()
+
+    def test_progress_interval_can_be_changed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Checkpoint(Path(directory) / "family.sqlite")
+            try:
+                checkpoint.seed(["AAAA-111"])
+                output = io.StringIO()
+                with redirect_stderr(output):
+                    crawl(checkpoint, FakeSession(), max_people=2, progress=2)
+                progress = output.getvalue()
+                self.assertNotIn("Exploring 1/2", progress)
+                self.assertIn("Exploring 2/2", progress)
+            finally:
+                checkpoint.close()
+
     def test_discovers_parents_children_and_spouses(self):
         self.assertEqual(
             related_people(
