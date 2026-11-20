@@ -82,12 +82,12 @@ def _event_checklist(events, existing, language):
     return "\n".join(part for part in (previous, *items) if part)
 
 
-def write_person_report(checkpoint, output, language="en"):
+def write_person_report(checkpoint, output, language="en", selected_ids=None):
     """Write a single Markdown report; return its path and record counts."""
     output = Path(output).expanduser()
     report = output.with_suffix(".md")
     report.parent.mkdir(parents=True, exist_ok=True)
-    data = collect_reports(checkpoint)
+    data = collect_reports(checkpoint, selected_ids=selected_ids)
     saved = _saved_reviews(report)
     es = language == "es"
 
