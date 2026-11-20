@@ -177,6 +177,9 @@ class CompleteFamilyTests(unittest.TestCase):
         class SessionWithSibling(FakeSession):
             def __init__(self):
                 super().__init__()
+                self.records["AAAA-111"]["persons"][0]["gender"] = {
+                    "type": "http://gedcomx.org/Male"
+                }
                 self.records["EEEE-555"] = {
                     "persons": [{"id": "EEEE-555", "living": False, "names": []}]
                 }
@@ -336,6 +339,23 @@ class CompleteFamilyTests(unittest.TestCase):
                 self.assertIn("1 CHIL @I", data)
             finally:
                 store.close()
+
+    def test_checkpoint_rejects_other_starting_person(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "family.sqlite"
+            store = Checkpoint(path)
+            try:
+                store.set_origin("AAAA-111")
+            finally:
+                store.close()
+
+            reopened = Checkpoint(path)
+            try:
+                reopened.set_origin("AAAA-111")
+                with self.assertRaisesRegex(ValueError, "different output|belongs"):
+                    reopened.set_origin("BBBB-222")
+            finally:
+                reopened.close()
 
     def test_unavailable_people_are_reported_as_failed(self):
         with tempfile.TemporaryDirectory() as folder:
