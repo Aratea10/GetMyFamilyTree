@@ -90,6 +90,132 @@ class ReviewExportTests(unittest.TestCase):
         self.checkpoint.close()
         self.temp.cleanup()
 
+    def test_source_citations_notes_and_memories_from_cache(self):
+        """Source details must be linked to the correct person, not guessed."""
+        self.person["sources"] = [{"descriptionId": "S1"}]
+        self.person["evidence"] = [{"id": "M1234-1"}]
+        self.checkpoint.save_response(
+            "/platform/tree/persons?pids=AAAA-111",
+            {"persons": [self.person]},
+        )
+        self.checkpoint.save_response(
+            "0::/platform/tree/persons/AAAA-111/sources",
+            {
+                "persons": [{"sources": [{
+                    "descriptionId": "S1",
+                    "attribution": {"changeMessage": "Checked in archive"},
+                }]}],
+                "sourceDescriptions": [{
+                    "id": "S1",
+                    "titles": [{"value": "Libro de bautismos"}],
+                    "citations": [{"value": "Parroquia de Darbo, folio 12"}],
+                    "about": "https://www.familysearch.org/ark:/61903/1:1:ABCDE",
+                    "notes": [{"id": "source-note-1", "text": "Original scan"}],
+                }],
+            },
+        )
+        self.checkpoint.save_response(
+            "0::/platform/tree/persons/AAAA-111/notes",
+            {"persons": [{"notes": [{
+                "id": "person-note-1",
+                "subject": "Research",
+                "text": "Compare with parish register",
+            }]}]},
+        )
+        self.checkpoint.save_response(
+            "0::/platform/memories/memories/M1234",
+            {"sourceDescriptions": [{
+                "id": "mem-1",
+                "mediaType": "image/jpeg",
+                "titles": [{"value": "Old family photograph"}],
+                "about": "https://www.familysearch.org/photos/artifacts/123",
+            }]},
+        )
+        result = export_reports(self.checkpoint, self.output)
+        sources = read_table(result["paths"]["sources"])
+        notes = read_table(result["paths"]["notes"])
+        memories = read_table(result["paths"]["memories"])
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["owner_id"], "AAAA-111")
+        self.assertEqual(sources[0]["title"], "Libro de bautismos")
+        self.assertIn("folio 12", sources[0]["citation"])
+        self.assertEqual(sources[0]["attribution_note"], "Checked in archive")
+        self.assertEqual(sources[0]["details_available"], "True")
+        self.assertTrue(sources[0]["url"].startswith("https://"))
+
+        self.assertEqual(
+            {note["text"] for note in notes},
+            {"Original scan", "Compare with parish register"},
+        )
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0]["person_id"], "AAAA-111")
+        self.assertEqual(memories[0]["memory_id"], "M1234")
+        self.assertEqual(memories[0]["title"], "Old family photograph")
+        self.assertEqual(memories[0]["media_type"], "image/jpeg")
+
+    def test_source_reference_without_details_is_kept(self):
+        self.person["sources"] = [{"descriptionId": "missing-source"}]
+        self.checkpoint.save_response(
+            "/platform/tree/persons?pids=AAAA-111",
+            {"persons": [self.person]},
+        )
+        paths = export_reports(self.checkpoint, self.output)["paths"]
+        sources = read_table(paths["sources"])
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["source_id"], "missing-source")
+        self.assertEqual(sources[0]["details_available"], "False")
+        self.assertEqual(sources[0]["title"], "")
+
+    def test_relationship_source_and_note_are_kept(self):
+        self.checkpoint.save_response(
+            "0::/platform/tree/couple-relationships/couple1",
+            {"relationships": [{
+                "id": "couple1",
+                "sources": [{"descriptionId": "marriage-source"}],
+            }]},
+        )
+        self.checkpoint.save_response(
+            "0::/platform/tree/couple-relationships/couple1/sources",
+            {"sourceDescriptions": [{
+                "id": "marriage-source",
+                "titles": [{"value": "Marriage register"}],
+                "citations": [{"value": "Parish book 1903"}],
+            }]},
+        )
+        self.checkpoint.save_response(
+            "0::/platform/tree/couple-relationships/couple1/notes",
+            {"relationships": [{"notes": [{
+                "id": "marriage-note",
+                "text": "Verify witness names",
+            }]}]},
+        )
+        report = export_reports(self.checkpoint, self.output)
+        sources = read_table(report["paths"]["sources"])
+        notes = read_table(report["paths"]["notes"])
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["owner_type"], "couple")
+        self.assertEqual(sources[0]["owner_id"], "couple1")
+        self.assertEqual(sources[0]["title"], "Marriage register")
+        self.assertEqual(notes[0]["text"], "Verify witness names")
+
+    def test_source_text_is_safe_for_spreadsheets(self):
+        self.person["sources"] = [{"descriptionId": "S2"}]
+        self.checkpoint.save_response(
+            "/platform/tree/persons?pids=AAAA-111",
+            {"persons": [self.person]},
+        )
+        self.checkpoint.save_response(
+            "0::/platform/tree/persons/AAAA-111/sources",
+            {"sourceDescriptions": [{
+                "id": "S2",
+                "titles": [{"value": "=HYPERLINK(\"https://example.org\")"}],
+            }]},
+        )
+        report = export_reports(self.checkpoint, self.output)
+        sources = read_table(report["paths"]["sources"])
+        self.assertTrue(sources[0]["title"].startswith("'=HYPERLINK"))
+
     def test_chronological_order_and_original_dates(self):
         result = export_reports(self.checkpoint, self.output)
         events = read_table(result["paths"]["events"])
