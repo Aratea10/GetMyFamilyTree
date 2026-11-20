@@ -14,7 +14,27 @@ MESSAGES = {
         "help_individual": "FamilySearch person ID",
         "help_output": "Output GEDCOM filename (.ged) or export folder",
         "help_database": "Persistent SQLite checkpoint (defaults to output with .sqlite suffix)",
-        "help_max_people": "Pause after this many people; 0 means no cap (potentially enormous)",
+        "help_max_people": "Maximum people in the selected scope; 0 removes the safety cap",
+        "help_scope": "Download scope: full, ancestors, descendants, or family",
+        "help_generations": "Number of generations from the starting person (ancestors/descendants)",
+        "help_distance": "Maximum relationship links from the starting person (family)",
+        "error_generations": "ancestors and descendants require --generations N (N >= 0); do not use --distance",
+        "error_distance": "family requires --distance N (N >= 0); do not use --generations",
+        "error_full_options": "full does not accept --generations or --distance",
+        "error_scope_origin": "Cannot find the starting FamilySearch ID in this checkpoint",
+        "scope_full": "Complete connected tree",
+        "scope_ancestors": "Ancestors",
+        "scope_descendants": "Descendants",
+        "scope_family": "Extended family",
+        "scope_start": "Exploring {scope}; person limit {limit}. Reusing cached records.",
+        "scope_person": (
+            "Explored {index}{limit}: {name} ({fid}), depth {depth} | "
+            "+{added} newly queued | {queued} to visit"
+        ),
+        "scope_finish": (
+            "Scope: {selected} people, {pending} queued, {failed} unavailable; "
+            "{reused} person records reused from cache."
+        ),
         "help_rate_limit": "Maximum HTTP requests per second, passed to FamilySearch session",
         "help_remember": "After a successful login, save credentials in the system keyring",
         "help_forget": "Remove saved FamilySearch credentials and exit",
@@ -95,7 +115,27 @@ MESSAGES = {
         "help_individual": "ID de la persona en FamilySearch",
         "help_output": "Archivo GEDCOM (.ged) o carpeta de exportación",
         "help_database": "Base SQLite de progreso (por defecto, junto al GEDCOM)",
-        "help_max_people": "Detenerse tras este número de personas; 0 sin límite (puede ser enorme)",
+        "help_max_people": "Máximo de personas en el modo seleccionado; 0 elimina el límite",
+        "help_scope": "Modo de descarga: full, ancestors, descendants o family",
+        "help_generations": "Número de generaciones desde la persona inicial (antepasados/descendientes)",
+        "help_distance": "Distancia máxima de vínculos familiares (familia ampliada)",
+        "error_generations": "ancestors y descendants requieren --generations N (N >= 0); no utilices --distance",
+        "error_distance": "family requiere --distance N (N >= 0); no utilices --generations",
+        "error_full_options": "full no admite --generations ni --distance",
+        "error_scope_origin": "No se encuentra el ID de la persona inicial en la base de datos",
+        "scope_full": "Árbol completo",
+        "scope_ancestors": "Antepasados",
+        "scope_descendants": "Descendientes",
+        "scope_family": "Familia ampliada",
+        "scope_start": "Explorando {scope}; límite {limit} personas. Reutilizando datos guardados.",
+        "scope_person": (
+            "Explorada {index}{limit}: {name} ({fid}), distancia {depth} | "
+            "+{added} en cola | {queued} por visitar"
+        ),
+        "scope_finish": (
+            "Modo: {selected} personas, {pending} pendientes, {failed} no disponibles; "
+            "{reused} fichas recuperadas de la base local."
+        ),
         "help_rate_limit": "Máximo de solicitudes HTTP por segundo a FamilySearch",
         "help_remember": "Guardar el inicio de sesión en el llavero tras autenticarse",
         "help_forget": "Eliminar las credenciales guardadas y salir",
