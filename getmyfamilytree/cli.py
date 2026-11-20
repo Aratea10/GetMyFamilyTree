@@ -439,61 +439,80 @@ def assemble(
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Explore all accessible FamilySearch relatives in every direction."
+    # Read the language before constructing the translated argparse help.
+    language_parser = argparse.ArgumentParser(add_help=False)
+    language_parser.add_argument(
+        "--language", "--lang", choices=("auto", "en", "es"), default="auto"
     )
-    parser.add_argument("-i", "--individual", help="FamilySearch person ID")
-    parser.add_argument("-o", "--output", type=Path, help="Output GEDCOM")
+    language_options, _ = language_parser.parse_known_args(argv)
+    language = resolve_language(language_options.language)
+
+    def tr(message, **values):
+        return translate(language, message, **values)
+
+    parser = argparse.ArgumentParser(description=tr("description"))
     parser.add_argument(
-        "--database", type=Path,
-        help="Persistent SQLite checkpoint (defaults to output with .sqlite suffix)"
+        "--language", "--lang", choices=("auto", "en", "es"),
+        default="auto", help=tr("help_language"),
     )
+    parser.add_argument("-i", "--individual", help=tr("help_individual"))
+    parser.add_argument("-o", "--output", type=Path, help=tr("help_output"))
     parser.add_argument(
-        "--max-people", type=int, default=1000,
-        help="Pause after this many people; 0 means no cap (potentially enormous)"
-    )
-    parser.add_argument(
-        "--rate-limit", type=int, default=2,
-        help="Maximum HTTP requests per second, passed to FamilySearch session"
-    )
-    parser.add_argument(
-        "--remember-login", action="store_true",
-        help="After a successful login, save credentials in the system keyring"
-    )
-    parser.add_argument(
-        "--forget-login", action="store_true",
-        help="Remove saved FamilySearch credentials and exit"
+        "--database", type=Path, help=tr("help_database")
     )
     parser.add_argument(
-        "--progress-every", type=int, default=1, metavar="N",
-        help="Show progress every N people (default: 1; 0 disables progress)"
+        "--max-people", type=int, default=1000, help=tr("help_max_people")
     )
-    parser.add_argument("--no-notes", action="store_true")
-    parser.add_argument("--no-sources", action="store_true")
-    parser.add_argument("--no-memories", action="store_true")
-    parser.add_argument("--no-contributors", action="store_true")
+    parser.add_argument(
+        "--rate-limit", type=int, default=2, help=tr("help_rate_limit")
+    )
+    parser.add_argument(
+        "--remember-login", action="store_true", help=tr("help_remember")
+    )
+    parser.add_argument(
+        "--forget-login", action="store_true", help=tr("help_forget")
+    )
+    parser.add_argument(
+        "--progress-every", type=int, default=1,
+        metavar="N", help=tr("help_progress")
+    )
+    parser.add_argument(
+        "--no-notes", action="store_true", help=tr("help_no_notes")
+    )
+    parser.add_argument(
+        "--no-sources", action="store_true", help=tr("help_no_sources")
+    )
+    parser.add_argument(
+        "--no-memories", action="store_true", help=tr("help_no_memories")
+    )
+    parser.add_argument(
+        "--no-contributors", action="store_true",
+        help=tr("help_no_contributors"),
+    )
     args = parser.parse_args(argv)
     credentials = CredentialStore()
     if args.forget_login:
         if args.remember_login:
-            parser.error("--forget-login cannot be combined with --remember-login")
+            parser.error(tr("error_forget_conflict"))
         try:
             removed = credentials.clear()
         except CredentialStoreError:
-            parser.exit(2, "Cannot access the system keyring to remove credentials.\n")
-        print("Saved FamilySearch login removed." if removed else "No saved FamilySearch login found.")
+            parser.exit(2, tr("error_forget_keyring") + "\n")
+        print(tr("saved_removed" if removed else "saved_not_found"))
         return
+
     if not args.individual or not args.output:
-        parser.error("both -i/--individual and -o/--output are required for a download")
+        parser.error(tr("error_required"))
     if not PERSON_ID.fullmatch(args.individual):
-        parser.error("Invalid FamilySearch ID")
+        parser.error(tr("error_invalid_id"))
     if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
-        parser.error("max-people and progress-every must be >= 0; rate-limit must be >= 1")
+        parser.error(tr("error_invalid_limits"))
+
     checkpoint_path = args.database or args.output.with_suffix(".sqlite")
     checkpoint = Checkpoint(checkpoint_path)
     try:
         try:
-            checkpoint.set_origin(args.individual)
+            checkpoint.set_origin(args.individual, language=language)
         except ValueError as error:
             parser.exit(2, f"{error}\n")
         checkpoint.seed([args.individual])
@@ -502,57 +521,51 @@ def main(argv=None):
             saved_login = credentials.load()
         except CredentialStoreError:
             saved_login = None
-            print(
-                "System keyring unavailable; please enter FamilySearch credentials.",
-                file=sys.stderr,
-            )
+            print(tr("error_keyring"), file=sys.stderr)
 
         using_saved_login = saved_login is not None
         if saved_login:
             username, password = saved_login
-            print("Using FamilySearch login from the system keyring.", file=sys.stderr)
+            print(tr("saved_login_used"), file=sys.stderr)
         else:
-            username = input("Enter FamilySearch username: ")
-            password = getpass.getpass("Enter FamilySearch password: ")
+            username = input(tr("username_prompt"))
+            password = getpass.getpass(tr("password_prompt"))
 
         session = Session(
             username, password, rate_limit=args.rate_limit, delay=0.2
         )
         if not session.logged and using_saved_login:
-            print(
-                "Saved login was not accepted; enter your current credentials.",
-                file=sys.stderr,
-            )
-            username = input("Enter FamilySearch username: ")
-            password = getpass.getpass("Enter FamilySearch password: ")
+            print(tr("saved_login_rejected"), file=sys.stderr)
+            username = input(tr("username_prompt"))
+            password = getpass.getpass(tr("password_prompt"))
             session = Session(
                 username, password, rate_limit=args.rate_limit, delay=0.2
             )
         if not session.logged:
-            parser.exit(2, "Could not log in to FamilySearch.\n")
+            parser.exit(2, tr("error_login") + "\n")
 
-        if args.remember_login or (using_saved_login and saved_login != (username, password)):
+        if args.remember_login or (
+            using_saved_login and saved_login != (username, password)
+        ):
             try:
                 credentials.save(username, password)
-                print("FamilySearch login saved in the system keyring.", file=sys.stderr)
+                print(tr("login_saved"), file=sys.stderr)
             except CredentialStoreError:
-                print(
-                    "Could not save login in the system keyring. "
-                    "You will be prompted next time.",
-                    file=sys.stderr,
-                )
+                print(tr("login_save_failed"), file=sys.stderr)
         del password
-        print(f"Checkpoint: {checkpoint.path}", file=sys.stderr)
+
+        print(tr("checkpoint", path=checkpoint.path), file=sys.stderr)
         try:
             exhausted = crawl(
                 checkpoint, session, max_people=args.max_people,
-                progress=args.progress_every,
+                progress=args.progress_every, language=language,
             )
         except KeyboardInterrupt:
             exhausted = False
-            print("\nPaused. Writing GEDCOM snapshot...", file=sys.stderr)
+            print("\n" + tr("interrupted"), file=sys.stderr)
+
         print(
-            f"Building GEDCOM from {checkpoint.count('done')} retrieved people...",
+            tr("building", done=checkpoint.count("done")),
             file=sys.stderr, flush=True,
         )
         n, families = assemble(
@@ -564,16 +577,12 @@ def main(argv=None):
         pending = checkpoint.count("pending")
         failed = checkpoint.count("failed")
         print(
-            f"Saved {n} people and {families} families to {args.output}. "
-            f"Pending: {pending}; failed: {failed}.",
+            tr("saved_tree", people=n, families=families,
+               path=args.output, pending=pending, failed=failed),
             file=sys.stderr,
         )
         if not exhausted:
-            print(
-                "Not yet exhaustive. Run the SAME command again to resume "
-                "from the SQLite checkpoint.",
-                file=sys.stderr,
-            )
+            print(tr("resume"), file=sys.stderr)
     finally:
         checkpoint.close()
 
