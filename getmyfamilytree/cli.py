@@ -517,8 +517,9 @@ def main(argv=None):
         finally:
             report_checkpoint.close()
         print(
-            tr("report_saved", events=result["events"],
-               people=result["people"], path=result["paths"]["events"]),
+            tr("report_saved", events=result["events"], people=result["people"],
+               sources=result["sources"], notes=result["notes"],
+               memories=result["memories"], path=result["paths"]["events"]),
         )
         print(
             tr("report_review", path=result["paths"]["review"]),
@@ -599,8 +600,9 @@ def main(argv=None):
         )
         report = export_reports(checkpoint, args.output)
         print(
-            tr("report_saved", events=report["events"],
-               people=report["people"], path=report["paths"]["events"]),
+            tr("report_saved", events=report["events"], people=report["people"],
+               sources=report["sources"], notes=report["notes"],
+               memories=report["memories"], path=report["paths"]["events"]),
             file=sys.stderr,
         )
         print(
