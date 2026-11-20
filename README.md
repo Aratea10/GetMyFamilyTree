@@ -93,7 +93,37 @@ uvx --python 3.12 --from "git+https://github.com/Aratea10/GetMyFamilyTree.git" g
 to work on all three systems, but successful end-to-end FamilySearch downloads
 have not yet been verified on each platform.
 
-Your FamilySearch credentials will be requested interactively. **Never put the password in the command or commit it to Git.**
+### Remember your FamilySearch login (optional)
+
+By default, GetMyFamilyTree prompts for your FamilySearch username and password
+whenever no saved login exists. If this is your own computer, add
+`--remember-login` **once** to store the login in the operating system's
+credential vault (macOS Keychain, Windows Credential Manager, or a supported
+Linux secret store).
+
+For example, from a cloned project with uv:
+
+```sh
+uv run getmyfamilytree -i LVXP-TH5 --remember-login --max-people 100 -o ~/Downloads/GetMyFamilyTree.ged
+```
+
+After a successful login, later runs automatically reuse those saved credentials
+without asking again. Run the same command without `--remember-login` to
+continue exploring. On Windows, replace the output path with
+`"$HOME\\Downloads\\GetMyFamilyTree.ged"`.
+
+To remove the saved login at any time:
+
+```sh
+uv run getmyfamilytree --forget-login
+```
+
+The saved login stays in the **system keyring**, not in the GEDCOM, SQLite
+checkpoint or repository. Nothing is saved without `--remember-login`.
+Your operating system may request permission to access the keyring. If no
+secure keyring is available, the program will continue to ask for credentials.
+
+**Never put your password in a command or commit it to Git.**
 
 For safety, the first run pauses after **1,000 people**. That number is not a generation limit. Run the same command with `--max-people 5000` to explore more. If you deliberately want no person limit, pass `--max-people 0`; a large connected tree could run for a very long time and consume significant disk space and requests.
 
