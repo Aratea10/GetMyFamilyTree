@@ -294,7 +294,7 @@ class ReviewExportTests(unittest.TestCase):
         output = io.StringIO()
         with redirect_stdout(output):
             main(["--language", "es", "--report-only", "-o", str(self.output)])
-        self.assertIn("Creadas tablas de revisión", output.getvalue())
+        self.assertIn("Creado un único documento de revisión", output.getvalue())
         report_path = self.output.with_suffix(".md")
         self.assertTrue(report_path.exists())
         self.assertFalse(self.output.with_suffix(".events.csv").exists())
