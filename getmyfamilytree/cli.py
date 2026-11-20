@@ -18,6 +18,7 @@ from threading import RLock
 
 from getmyancestors.classes.session import Session
 from getmyancestors.classes.tree import Tree
+from getmyfamilytree.credentials import CredentialStore, CredentialStoreError
 
 PERSON_URL = "/platform/tree/persons?pids="
 FAMILIES_URL = "/platform/tree/persons/{}/families"
@@ -389,8 +390,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Explore all accessible FamilySearch relatives in every direction."
     )
-    parser.add_argument("-i", "--individual", required=True, help="FamilySearch person ID")
-    parser.add_argument("-o", "--output", required=True, type=Path, help="Output GEDCOM")
+    parser.add_argument("-i", "--individual", help="FamilySearch person ID")
+    parser.add_argument("-o", "--output", type=Path, help="Output GEDCOM")
     parser.add_argument(
         "--database", type=Path,
         help="Persistent SQLite checkpoint (defaults to output with .sqlite suffix)"
@@ -403,11 +404,31 @@ def main(argv=None):
         "--rate-limit", type=int, default=2,
         help="Maximum HTTP requests per second, passed to FamilySearch session"
     )
+    parser.add_argument(
+        "--remember-login", action="store_true",
+        help="After a successful login, save credentials in the system keyring"
+    )
+    parser.add_argument(
+        "--forget-login", action="store_true",
+        help="Remove saved FamilySearch credentials and exit"
+    )
     parser.add_argument("--no-notes", action="store_true")
     parser.add_argument("--no-sources", action="store_true")
     parser.add_argument("--no-memories", action="store_true")
     parser.add_argument("--no-contributors", action="store_true")
     args = parser.parse_args(argv)
+    credentials = CredentialStore()
+    if args.forget_login:
+        if args.remember_login:
+            parser.error("--forget-login cannot be combined with --remember-login")
+        try:
+            removed = credentials.clear()
+        except CredentialStoreError:
+            parser.exit(2, "Cannot access the system keyring to remove credentials.\n")
+        print("Saved FamilySearch login removed." if removed else "No saved FamilySearch login found.")
+        return
+    if not args.individual or not args.output:
+        parser.error("both -i/--individual and -o/--output are required for a download")
     if not PERSON_ID.fullmatch(args.individual):
         parser.error("Invalid FamilySearch ID")
     if args.max_people < 0 or args.rate_limit < 1:
@@ -421,14 +442,50 @@ def main(argv=None):
             parser.exit(2, f"{error}\n")
         checkpoint.seed([args.individual])
         checkpoint.retry_failed()
-        username = input("Enter FamilySearch username: ")
-        password = getpass.getpass("Enter FamilySearch password: ")
+        try:
+            saved_login = credentials.load()
+        except CredentialStoreError:
+            saved_login = None
+            print(
+                "System keyring unavailable; please enter FamilySearch credentials.",
+                file=sys.stderr,
+            )
+
+        using_saved_login = saved_login is not None
+        if saved_login:
+            username, password = saved_login
+            print("Using FamilySearch login from the system keyring.", file=sys.stderr)
+        else:
+            username = input("Enter FamilySearch username: ")
+            password = getpass.getpass("Enter FamilySearch password: ")
+
         session = Session(
             username, password, rate_limit=args.rate_limit, delay=0.2
         )
-        del password
+        if not session.logged and using_saved_login:
+            print(
+                "Saved login was not accepted; enter your current credentials.",
+                file=sys.stderr,
+            )
+            username = input("Enter FamilySearch username: ")
+            password = getpass.getpass("Enter FamilySearch password: ")
+            session = Session(
+                username, password, rate_limit=args.rate_limit, delay=0.2
+            )
         if not session.logged:
             parser.exit(2, "Could not log in to FamilySearch.\n")
+
+        if args.remember_login or (using_saved_login and saved_login != (username, password)):
+            try:
+                credentials.save(username, password)
+                print("FamilySearch login saved in the system keyring.", file=sys.stderr)
+            except CredentialStoreError:
+                print(
+                    "Could not save login in the system keyring. "
+                    "You will be prompted next time.",
+                    file=sys.stderr,
+                )
+        del password
         print(f"Checkpoint: {checkpoint.path}", file=sys.stderr)
         try:
             exhausted = crawl(checkpoint, session, max_people=args.max_people)
