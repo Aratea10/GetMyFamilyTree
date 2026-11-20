@@ -187,7 +187,18 @@ branch.
 | `GetMyFamilyTree.people.csv` | FamilySearch IDs, names, gender, living status and profile links |
 | `GetMyFamilyTree.events.csv` | Individual facts in chronological order, with year, original date, formal date, place, sources and stable event keys |
 | `GetMyFamilyTree.relationships.csv` | Parent/child and couple relationships with their FamilySearch IDs |
+| `GetMyFamilyTree.sources.csv` | Source titles, citations, available URLs, source notes, and the person or couple they belong to |
+| `GetMyFamilyTree.notes.csv` | Person, couple and source notes with the related IDs |
+| `GetMyFamilyTree.memories.csv` | Available memory titles, types and links associated with each person |
 | `GetMyFamilyTree.review.csv` | A separate checklist: `event_key`, `verified`, and `notes` |
+
+The source, note, and memory tables use **the data already retrieved and
+cached during GEDCOM export**. The source file shows which person or couple a
+citation belongs to; that does not automatically prove every fact of the
+person. The events table keeps source references present on each individual
+fact. If a source cannot be retrieved, its reference remains visible with
+`details_available=False`, rather than inventing a title or citation.
+Memory links do not download the original image files.
 
 The `events.csv` table is sorted by **year**, with undated and range-based
 events at the end. Each row includes `date_status`, so approximate years and
