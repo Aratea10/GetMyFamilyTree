@@ -406,6 +406,22 @@ def collect_reports(checkpoint, selected_ids=None):
         item["event_key"],
     ))
 
+    # A bounded scope should not list unselected people as if they had
+    # been downloaded. Only keep relationships whose known endpoints are
+    # all within the requested person set.
+    if selected_ids is not None:
+        chosen = set(selected_ids)
+        relations = {
+            key: relationship for key, relationship in relations.items()
+            if all(
+                identifier in chosen
+                for identifier in (
+                    _member(relationship, field)
+                    for field in ("person1", "person2", "parent1", "parent2", "child")
+                ) if identifier
+            )
+        }
+
     relationships = []
     for key, relationship in relations.items():
         first = _member(relationship, "person1")
