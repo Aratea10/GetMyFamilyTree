@@ -153,7 +153,7 @@ def crawl_scope(
         for identifier, depth in items:
             if max_depth is not None and depth >= max_depth:
                 continue
-            for neighbour in _neighbours(identifier, graph[identifier], scope):
+            for neighbour in sorted(_neighbours(identifier, graph[identifier], scope)):
                 offer(neighbour, depth + 1)
 
     if progress:
@@ -177,7 +177,7 @@ def crawl_scope(
 
             if fid in selected:
                 if max_depth is None or depth < max_depth:
-                    for other in _neighbours(fid, graph[fid], scope):
+                    for other in sorted(_neighbours(fid, graph[fid], scope)):
                         offer(other, depth + 1)
                 continue
 
@@ -238,7 +238,7 @@ def crawl_scope(
 
             selected[fid] = depth
             if max_depth is None or depth < max_depth:
-                for other in _neighbours(fid, graph[fid], scope):
+                for other in sorted(_neighbours(fid, graph[fid], scope)):
                     offer(other, depth + 1)
                 propagate()
 
