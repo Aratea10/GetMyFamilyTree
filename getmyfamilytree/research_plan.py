@@ -1,7 +1,6 @@
 """Persistent research tracking, independent of FamilySearch downloads"""
 
-from getmyfamilytree.reports import PERSON_URL
-from getmyfamilytree.scopes import _person_name
+from getmyfamilytree.research_recommendations import build_recommendations
 
 
 VALID_STATUSES = {"pending", "in_progress", "done", "postponed"}
@@ -30,16 +29,31 @@ class ResearchPlan:
             )
 
     def sync(self):
-        """Add downloaded people without resetting existing progress"""
+        """Add new people without changing existing task positions"""
         identifiers = self.checkpoint.completed_ids()
 
         with self.checkpoint.lock, self.checkpoint.connection:
+            existing = {
+                row[0]
+                for row in self.checkpoint.connection.execute(
+                    "SELECT fid FROM research_tasks"
+                )
+            }
+
+            maximum = self.checkpoint.connection.execute(
+                "SELECT MAX(position) FROM research_tasks"
+            ).fetchone()[0]
+
+            next_position = 0 if maximum is None else maximum + 1
+
+            new_people = [fid for fid in identifiers if fid not in existing]
+
             self.checkpoint.connection.executemany(
                 """
-                INSERT OR IGNORE INTO research_tasks (fid, position)
+                INSERT INTO research_tasks (fid, position)
                 VALUES (?, ?)
                 """,
-                enumerate_ids(identifiers),
+                ((fid, next_position + index) for index, fid in enumerate(new_people)),
             )
 
         return len(identifiers)
@@ -57,7 +71,7 @@ class ResearchPlan:
                 raise KeyError(fid)
 
     def set_priority(self, fid, priority):
-        """Use 0 for high, 1 for normal, and 2 for low priority."""
+        """Use 0 for high, 1 for normal, and 2 for low priority"""
         if priority not in (0, 1, 2):
             raise ValueError(f"Unsupported priority: {priority}")
 
@@ -73,32 +87,53 @@ class ResearchPlan:
         with self.checkpoint.lock:
             rows = self.checkpoint.connection.execute(
                 """
-                SELECT fid, status, priority
+                SELECT fid, status, priority, position
                 FROM research_tasks
-                ORDER BY
-                    CASE WHEN status = 'postponed' THEN 1 ELSE 0 END,
-                    priority,
-                    position,
-                    fid
                 """
             ).fetchall()
 
+        recommendations = build_recommendations(
+            self.checkpoint,
+            [fid for fid, _, _, _ in rows],
+        )
+
+        status_order = {
+            "in_progress": 0,
+            "pending": 1,
+            "done": 2,
+            "postponed": 3,
+        }
+
         result = []
 
-        for fid, status, priority in rows:
-            document = self.checkpoint.get_response(PERSON_URL + fid) or {}
+        for fid, status, priority, position in rows:
+            suggestion = recommendations[fid]
 
             result.append(
                 {
                     "id": fid,
-                    "name": _person_name(document, fid),
+                    "name": suggestion["name"],
                     "status": status,
                     "priority": priority,
+                    "category": suggestion["category"],
+                    "generation": suggestion["generation"],
+                    "branches": suggestion["branches"],
+                    "_sort": (
+                        status_order[status],
+                        priority,
+                        suggestion["recommendation_key"],
+                        position,
+                        fid,
+                    ),
                 }
             )
 
-        return result
+        result.sort(key=lambda item: item["_sort"])
 
+        for item in result:
+            del item["_sort"]
+
+        return result
 
 def enumerate_ids(identifiers):
     for position, fid in enumerate(identifiers):
