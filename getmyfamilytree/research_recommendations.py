@@ -25,6 +25,11 @@ def _distances(starts, neighbours):
     return result
 
 
+def _parentage_family(person_id, parents, children):
+    """Find relatives through parent-child links, not through partners"""
+    ancestors = _distances([person_id], parents)
+    return set(_distances(ancestors, children))
+
 def _sex(document, fid):
     person = next(
         (person for person in document.get("persons", []) if person.get("id") == fid),
@@ -78,20 +83,13 @@ def build_recommendations(checkpoint, identifiers):
     )
     root_index = {fid: index for index, fid in enumerate(roots)}
 
+    family = _parentage_family(origin, parents, children) if origin in known else set()
+
     memberships = defaultdict(set)
 
     for root in roots:
-        older_generations = _distances([root], parents)
-        blood_relatives = _distances(older_generations, children)
-
-        for relative in blood_relatives:
+        for relative in _parentage_family(root, parents, children):
             memberships[relative].add(root)
-
-    by_marriage = defaultdict(set)
-
-    for person_id, branch_ids in memberships.items():
-        for spouse_id in partners.get(person_id, ()):
-            by_marriage[spouse_id].update(branch_ids)
 
     blood_links = defaultdict(set)
 
@@ -101,7 +99,44 @@ def build_recommendations(checkpoint, identifiers):
             blood_links[parent_id].add(child_id)
 
     blood_distance = _distances([origin], blood_links) if origin in known else {}
-    core = set(ancestor_depth) | set(descendant_depth)
+
+    by_marriage = defaultdict(set)
+    inlaw_distance = {}
+    affinity_links = defaultdict(set)
+    family_cache = {}
+    spouse_distance_cache = {}
+
+    for blood_person in sorted(family):
+        for spouse_id in sorted(partners.get(blood_person, ())):
+            if spouse_id not in family_cache:
+                relatives = _parentage_family(spouse_id, parents, children)
+                family_cache[spouse_id] = relatives
+
+                restricted_links = {
+                    fid: blood_links[fid] & relatives for fid in relatives
+                }
+
+                spouse_distance_cache[spouse_id] = _distances(
+                    [spouse_id], restricted_links
+                )
+
+            for relative in family_cache[spouse_id]:
+                if relative in family:
+                    continue
+
+                by_marriage[relative].update(memberships[blood_person])
+                affinity_links[relative].add((blood_person, spouse_id))
+
+                distance = (
+                    blood_distance.get(blood_person, 10_000)
+                    + 1
+                    + spouse_distance_cache[spouse_id].get(relative, 10_000)
+                )
+
+                inlaw_distance[relative] = min(
+                    distance,
+                    inlaw_distance.get(relative, float("inf")),
+                )
 
     category_order = {
         "origin": 0,
@@ -124,10 +159,10 @@ def build_recommendations(checkpoint, identifiers):
         elif fid in descendant_depth:
             category = "descendant"
             generation = descendant_depth[fid]
-        elif memberships[fid]:
+        elif fid in family:
             category = "collateral"
             generation = None
-        elif by_marriage[fid] or partners[fid].intersection(core):
+        elif fid in by_marriage:
             category = "in_law"
             generation = None
         else:
@@ -155,20 +190,20 @@ def build_recommendations(checkpoint, identifiers):
         distance = blood_distance.get(fid, 10_000)
 
         if category == "in_law":
-            distance = min(
-                (
-                    blood_distance[relative] + 1
-                    for relative in partners[fid]
-                    if relative in blood_distance
-                ),
-                default=10_000,
-            )
+            distance = inlaw_distance.get(fid, 10_000)
 
         suggestions[fid] = {
             "name": names[fid],
             "category": category,
             "generation": generation,
             "branches": branches,
+            "affinity_links": [
+                {
+                    "relative_id": relative_id,
+                    "partner_id": partner_id,
+                }
+                for relative_id, partner_id in sorted(affinity_links.get(fid, ()))
+            ],
             "recommendation_key": (
                 category_order[category],
                 min(

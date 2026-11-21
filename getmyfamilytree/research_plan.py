@@ -118,6 +118,7 @@ class ResearchPlan:
                     "category": suggestion["category"],
                     "generation": suggestion["generation"],
                     "branches": suggestion["branches"],
+                    "affinity_links": suggestion["affinity_links"],
                     "_sort": (
                         status_order[status],
                         priority,

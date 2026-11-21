@@ -123,7 +123,7 @@ class RecommendationTests(unittest.TestCase):
             "COUS-111": "collateral",
             "SPSE-111": "in_law",
             "CHLD-111": "descendant",
-            "INLW-111": "unclassified",
+            "INLW-111": "in_law",
             "OTHR-111": "unclassified",
         }
 
@@ -172,6 +172,152 @@ class RecommendationTests(unittest.TestCase):
         finally:
             other.close()
 
+    def test_extended_in_laws_and_shared_branches(self):
+        extra_ids = [
+            "GILW-111",
+            "SLAW-111",
+            "AFLW-111",
+            "CILW-111",
+            "NKID-111",
+            "COPO-111",
+            "NSPS-111",
+            "BCSP-111",
+            "BCPA-111",
+            "SLSP-111",
+            "SLPA-111",
+        ]
+
+        self.store.seed(extra_ids)
+
+        for fid in extra_ids:
+            self.store.save_response(
+                PERSON_URL + fid,
+                {
+                    "persons": [
+                        {
+                            "id": fid,
+                            "display": {"name": fid},
+                        }
+                    ]
+                },
+            )
+            self.store.finish(fid, [])
+
+        self.store.save_response(
+            FAMILIES_URL.format("INLW-111"),
+            {
+                "childAndParentsRelationships": [
+                    parent_child("INLW-111", "GILW-111"),
+                    parent_child("SLAW-111", "INLW-111"),
+                    parent_child("AFLW-111", "GILW-111"),
+                ],
+                "relationships": [
+                    {
+                        "type": "http://gedcomx.org/Couple",
+                        "person1": {"resourceId": "INLW-111"},
+                        "person2": {"resourceId": "NSPS-111"},
+                    }
+                ],
+            },
+        )
+
+        self.store.save_response(
+            FAMILIES_URL.format("AFLW-111"),
+            {
+                "childAndParentsRelationships": [
+                    parent_child("CILW-111", "AFLW-111"),
+                ]
+            },
+        )
+
+        self.store.save_response(
+            FAMILIES_URL.format("SLAW-111"),
+            {
+                "childAndParentsRelationships": [
+                    parent_child("NKID-111", "SLAW-111", "COPO-111"),
+                ]
+            },
+        )
+
+        self.store.save_response(
+            FAMILIES_URL.format("COUS-111"),
+            {
+                "relationships": [
+                    {
+                        "type": "http://gedcomx.org/Couple",
+                        "person1": {"resourceId": "COUS-111"},
+                        "person2": {"resourceId": "BCSP-111"},
+                    }
+                ],
+            },
+        )
+
+        self.store.save_response(
+            FAMILIES_URL.format("BCSP-111"),
+            {
+                "childAndParentsRelationships": [
+                    parent_child("BCSP-111", "BCPA-111"),
+                ]
+            },
+        )
+
+        self.store.save_response(
+            FAMILIES_URL.format("SIBL-111"),
+            {
+                "relationships": [
+                    {
+                        "type": "http://gedcomx.org/Couple",
+                        "person1": {"resourceId": "SIBL-111"},
+                        "person2": {"resourceId": "SLSP-111"},
+                    }
+                ],
+            },
+        )
+
+        self.store.save_response(
+            FAMILIES_URL.format("SLSP-111"),
+            {
+                "childAndParentsRelationships": [
+                    parent_child("SLSP-111", "SLPA-111"),
+                ]
+            },
+        )
+
+        result = build_recommendations(self.store, self.ids + extra_ids)
+
+        for fid in [
+            "INLW-111",
+            "GILW-111",
+            "SLAW-111",
+            "AFLW-111",
+            "CILW-111",
+            "NKID-111",
+            "BCSP-111",
+            "BCPA-111",
+            "SLSP-111",
+            "SLPA-111",
+        ]:
+            with self.subTest(person=fid):
+                self.assertEqual(result[fid]["category"], "in_law")
+
+        for fid in ["COPO-111", "NSPS-111"]:
+            with self.subTest(unrelated=fid):
+                self.assertEqual(result[fid]["category"], "unclassified")
+
+        self.assertEqual(
+            {branch["side"] for branch in result["SLPA-111"]["branches"]},
+            {"paternal", "maternal"},
+        )
+
+        self.assertEqual(
+            result["BCPA-111"]["affinity_links"],
+            [
+                {
+                    "relative_id": "COUS-111",
+                    "partner_id": "BCSP-111",
+                }
+            ],
+        )
 
 if __name__ == "__main__":
     unittest.main()
