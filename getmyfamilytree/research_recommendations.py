@@ -83,6 +83,18 @@ def build_recommendations(checkpoint, identifiers):
     )
     root_index = {fid: index for index, fid in enumerate(roots)}
 
+    # Do not guess paternal/maternal labels when parentage
+    # is incomplete or ambiguous.
+    root_sides = {fid: "unknown" for fid in roots}
+
+    if len(roots) == 2 and {
+        sexes[fid] for fid in roots
+    } == {"male", "female"}:
+        for fid in roots:
+            root_sides[fid] = (
+                "paternal" if sexes[fid] == "male" else "maternal"
+            )
+
     family = _parentage_family(origin, parents, children) if origin in known else set()
 
     memberships = defaultdict(set)
@@ -178,10 +190,7 @@ def build_recommendations(checkpoint, identifiers):
             {
                 "id": root,
                 "name": names[root],
-                "side": {
-                    "male": "paternal",
-                    "female": "maternal",
-                }.get(sexes[root], "unknown"),
+                "side": root_sides[root],
             }
             for root in roots
             if root in branch_ids
