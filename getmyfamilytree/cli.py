@@ -303,6 +303,37 @@ class Checkpoint:
             else None
         )
 
+
+    def get_responses(self, keys):
+        """Read cached JSON responses in bounded SQLite batches"""
+        keys = list(dict.fromkeys(keys))
+
+        if not keys:
+            return {}
+
+        found = {}
+        batch_size = 400
+
+        with self.lock:
+            for start in range(0, len(keys), batch_size):
+                batch = keys[start:start + batch_size]
+
+                placeholders = ",".join("?" for _ in batch)
+
+                rows = self.connection.execute(
+                    f"""
+                    SELECT request_key, data
+                    FROM responses
+                    WHERE request_key IN ({placeholders})
+                    """,
+                    batch,
+                ).fetchall()
+
+                for request_key, data in rows:
+                    found[request_key] = json.loads(data)
+
+        return found
+
     def save_response(
         self, key, document
     ):
@@ -510,7 +541,7 @@ def crawl(
 
 
 def _combined_documents(documents):
-    """Recreate the batch response expected by Tree.add_indis from cached pages."""
+    """Recreate the batch response expected by Tree.add_indis from cached pages"""
     combined = {
         key: []
         for key in (
@@ -546,7 +577,7 @@ def _combined_documents(documents):
 
 
 class ReplaySession:
-    """Expose cached person responses to the original GEDCOM exporter."""
+    """Expose cached person responses to the original GEDCOM exporter"""
 
     def __init__(
         self, session, checkpoint
@@ -634,7 +665,7 @@ def assemble(
     selected_ids=None,
     language="en",
 ):
-    """Build a GEDCOM snapshot containing only the selected scope."""
+    """Build a GEDCOM snapshot containing only the selected scope"""
     ids = (
         checkpoint.completed_ids()
         if selected_ids is None
@@ -987,7 +1018,7 @@ def assemble(
 
 
 def resolve_output_path(destination):
-    """Accept either an explicit .ged file or a folder for a new export."""
+    """Accept either an explicit .ged file or a folder for a new export"""
     destination = Path(
         destination
     ).expanduser()

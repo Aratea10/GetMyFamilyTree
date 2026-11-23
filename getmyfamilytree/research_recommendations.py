@@ -44,9 +44,23 @@ def build_recommendations(checkpoint, identifiers):
     known = set(identifiers)
     origin = checkpoint.get_origin()
 
+    request_keys = [
+        PERSON_URL + fid
+        for fid in identifiers
+    ]
+
+    request_keys.extend(
+        FAMILIES_URL.format(fid)
+        for fid in identifiers
+    )
+
+    cached = checkpoint.get_responses(request_keys)
+
     documents = {
-        fid: checkpoint.get_response(PERSON_URL + fid) or {} for fid in identifiers
+        fid: cached.get(PERSON_URL + fid) or {}
+        for fid in identifiers
     }
+
     names = {fid: _person_name(documents[fid], fid) for fid in identifiers}
     sexes = {fid: _sex(documents[fid], fid) for fid in identifiers}
 
@@ -55,7 +69,7 @@ def build_recommendations(checkpoint, identifiers):
     partners = defaultdict(set)
 
     for fid in identifiers:
-        family_document = checkpoint.get_response(FAMILIES_URL.format(fid)) or {}
+        family_document = cached.get(FAMILIES_URL.format(fid)) or {}
 
         for document in (documents[fid], family_document):
             for kind, first, second in _edges(document):
