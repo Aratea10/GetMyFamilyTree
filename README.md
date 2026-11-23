@@ -251,6 +251,10 @@ prove every fact in that person's record.
 
 ## Acknowledgements and license
 
-GetMyFamilyTree builds on [Linekio/getmyancestors](https://github.com/Linekio/getmyancestors), maintained by Giulio Genovese. The original project is licensed under GNU GPL v3 or later, and is installed as a dependency rather than copied into this repository. Thanks to its contributors for its FamilySearch integration and GEDCOM export capabilities.
+GetMyFamilyTree is an independently developed genealogy research project that uses  [Linekio/getmyancestors](https://github.com/Linekio/getmyancestors), maintained by Giulio Genovese, as a dependency for FamilySearch integration and GEDCOM export.
 
-This project's code is also licensed under GPL-3.0-or-later; see LICENSE.
+The getmyancestors project is licensed under the GNU General Public License, version 3 or later (GPL-3.0-or-later).
+
+GetMyFamilyTree is also distributed under GPL-3.0-or-later. See [LICENSE](https://github.com/Aratea10/GetMyFamilyTree?tab=GPL-3.0-1-ov-file) for the full license text.
+
+Copyright (C) 2026 Aratea for the original GetMyFamilyTree code. Third-party components retain their respective copyrights and licenses.

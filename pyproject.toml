@@ -9,7 +9,9 @@ description = "Traverse the connected FamilySearch tree and export GEDCOM with a
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "GPL-3.0-or-later"}
-authors = []
+authors = [
+    { name = "Aratea"}
+]
 keywords = ["familysearch", "genealogy", "gedcom", "family-tree"]
 dependencies = ["getmyancestors==1.2.0", "keyring>=25,<26"]
 
