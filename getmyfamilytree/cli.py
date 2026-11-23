@@ -1007,7 +1007,16 @@ def resolve_output_path(destination):
 
 
 def main(argv=None):
-    # Read the language before constructing the translated argparse help.
+    if argv is None:
+        argv = sys.argv[1:]
+    else:
+        argv = list(argv)
+
+    if argv and argv[0] == "research":
+        from getmyfamilytree.research_cli import run as run_research
+
+        return run_research(argv[1:], Checkpoint)
+    # Read the language before constructing the translated argparse help
     language_parser = (
         argparse.ArgumentParser(
             add_help=False
