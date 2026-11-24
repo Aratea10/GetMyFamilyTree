@@ -23,8 +23,8 @@ from threading import RLock
 from getmyancestors.classes.session import (
     Session,
 )
-from getmyancestors.classes.tree import (
-    Tree,
+from getmyfamilytree.gedcom_tree import (
+    ExportTree,
 )
 from getmyfamilytree.credentials import (
     CredentialStore,
@@ -652,7 +652,6 @@ class ReplaySession:
                 )
         return document
 
-
 def assemble(
     checkpoint,
     session,
@@ -671,17 +670,21 @@ def assemble(
         if selected_ids is None
         else list(selected_ids)
     )
+
     if not ids:
         return 0, 0
-    tree = Tree(
+
+    tree = ExportTree(
         ReplaySession(
             session, checkpoint
         ),
         no_sources=no_sources,
         no_memories=no_memories,
     )
+
     total = len(ids)
     batch_size = 100
+
 
     for start in range(
         0, total, batch_size
