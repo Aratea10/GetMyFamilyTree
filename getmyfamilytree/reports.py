@@ -4,49 +4,94 @@ The GEDCOM and cached FamilySearch responses are not modified. Generated CSVs
 are replaced on each export, except the separate review checklist, whose
 existing annotations are preserved and new events are appended.
 """
+
 from __future__ import annotations
 
 import csv
 import hashlib
 import json
-from pathlib import Path
 import re
+from pathlib import Path
 
 PERSON_URL = "/platform/tree/persons?pids="
 FAMILIES_URL = "/platform/tree/persons/{}/families"
 
 PEOPLE_COLUMNS = (
-    "person_id", "name", "gender", "living", "events",
+    "person_id",
+    "name",
+    "gender",
+    "living",
+    "events",
     "familysearch_url",
 )
 EVENT_COLUMNS = (
-    "event_key", "year", "date_status", "person_id", "person_name",
-    "event_type", "date_original", "date_formal", "place", "value",
-    "source_references", "familysearch_url",
+    "event_key",
+    "year",
+    "date_status",
+    "person_id",
+    "person_name",
+    "event_type",
+    "date_original",
+    "date_formal",
+    "place",
+    "value",
+    "source_references",
+    "familysearch_url",
 )
 RELATIONSHIP_COLUMNS = (
-    "relationship_key", "relationship_type", "person1_id", "person1_name",
-    "person2_id", "person2_name", "parent1_id", "parent2_id", "child_id",
-    "date_original", "date_formal", "place",
+    "relationship_key",
+    "relationship_type",
+    "person1_id",
+    "person1_name",
+    "person2_id",
+    "person2_name",
+    "parent1_id",
+    "parent2_id",
+    "child_id",
+    "date_original",
+    "date_formal",
+    "place",
 )
 SOURCE_COLUMNS = (
-    "source_key", "owner_type", "owner_id", "owner_name", "source_id",
-    "title", "citation", "url", "description", "source_notes",
-    "attribution_note", "details_available",
+    "source_key",
+    "owner_type",
+    "owner_id",
+    "owner_name",
+    "source_id",
+    "title",
+    "citation",
+    "url",
+    "description",
+    "source_notes",
+    "attribution_note",
+    "details_available",
 )
 NOTE_COLUMNS = (
-    "note_key", "owner_type", "owner_id", "owner_name", "subject", "text",
+    "note_key",
+    "owner_type",
+    "owner_id",
+    "owner_name",
+    "subject",
+    "text",
 )
 MEMORY_COLUMNS = (
-    "memory_key", "person_id", "person_name", "evidence_id", "memory_id",
-    "media_type", "title", "description", "url", "details_available",
+    "memory_key",
+    "person_id",
+    "person_name",
+    "evidence_id",
+    "memory_id",
+    "media_type",
+    "title",
+    "description",
+    "url",
+    "details_available",
 )
 REVIEW_COLUMNS = ("event_key", "verified", "notes")
 EXACT_YEAR = re.compile(r"(?<!\d)([1-9]\d{3})(?!\d)")
 FORMAL_YEAR = re.compile(r"^\+([1-9]\d{3})(?:-\d{2}(?:-\d{2})?)?$")
 RANGE = re.compile(
     r"\b(?:between|bet|from|to|entre|hasta|before|after|bef|aft|"
-    r"antes|despu[eé]s)\b|\.\.|\b\d{4}\s*[-–/]\s*\d{4}\b",
+    r"antes|despu[eé]s)\b|\.\.|\b\d{4}\s*[-\u2013/]\s*\d{4}\b",
     re.IGNORECASE,
 )
 APPROXIMATE = re.compile(
@@ -88,7 +133,11 @@ def _name(person):
 def _date_parts(date):
     if not isinstance(date, dict):
         return "", "", ""
-    return _text(date.get("original")), _text(date.get("formal")), _text(date.get("normalized"))
+    return (
+        _text(date.get("original")),
+        _text(date.get("formal")),
+        _text(date.get("normalized")),
+    )
 
 
 def year_for_sorting(date):
@@ -99,9 +148,7 @@ def year_for_sorting(date):
     """
     original, formal, _ = _date_parts(date)
     years = set(EXACT_YEAR.findall(original))
-    if RANGE.search(original) or len(years) > 1 or (
-        formal and "/" in formal
-    ):
+    if RANGE.search(original) or len(years) > 1 or (formal and "/" in formal):
         return "", "range_or_relative"
 
     if years:
@@ -139,9 +186,12 @@ def _relationship_key(relationship):
     identifier = _text(relationship.get("id"))
     if identifier:
         return identifier
-    return "hash-" + hashlib.sha256(
-        json.dumps(relationship, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    ).hexdigest()[:24]
+    return (
+        "hash-"
+        + hashlib.sha256(
+            json.dumps(relationship, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()[:24]
+    )
 
 
 def _member(relationship, part):
@@ -157,7 +207,6 @@ def _source_refs(fact):
             if reference:
                 refs.add(_text(reference))
     return " | ".join(sorted(refs))
-
 
 
 def _cached_response(checkpoint, url):
@@ -188,14 +237,16 @@ def _read_notes(container, owner_type, owner_id, owner_name, rows):
     for number, note in enumerate(container.get("notes") or [], 1):
         if not isinstance(note, dict):
             continue
-        rows.append({
-            "note_key": _note_key(owner_type, owner_id, note, number),
-            "owner_type": owner_type,
-            "owner_id": owner_id,
-            "owner_name": owner_name,
-            "subject": _text(note.get("subject")),
-            "text": _text(note.get("text")),
-        })
+        rows.append(
+            {
+                "note_key": _note_key(owner_type, owner_id, note, number),
+                "owner_type": owner_type,
+                "owner_id": owner_id,
+                "owner_name": owner_name,
+                "subject": _text(note.get("subject")),
+                "text": _text(note.get("text")),
+            }
+        )
 
 
 def _source_ref_id(value):
@@ -203,8 +254,16 @@ def _source_ref_id(value):
     return value.rsplit("#", 1)[-1] if "#" in value else value
 
 
-def _owner_sources(checkpoint, owner_type, owner_id, owner_name, source_refs,
-                   source_endpoint, rows, notes):
+def _owner_sources(
+    checkpoint,
+    owner_type,
+    owner_id,
+    owner_name,
+    source_refs,
+    source_endpoint,
+    rows,
+    notes,
+):
     """Include every owner reference, even when its source details are missing."""
     response = _cached_response(checkpoint, source_endpoint)
     descriptions = {
@@ -229,7 +288,7 @@ def _owner_sources(checkpoint, owner_type, owner_id, owner_name, source_refs,
                 if ref:
                     refs.setdefault(_source_ref_id(ref), []).append(item)
 
-    for source_id, description in descriptions.items():
+    for source_id in descriptions:
         refs.setdefault(source_id, [])
     for source_id, references in refs.items():
         description = descriptions.get(source_id) or {}
@@ -242,28 +301,33 @@ def _owner_sources(checkpoint, owner_type, owner_id, owner_name, source_refs,
             ),
             "",
         )
-        rows.append({
-            "source_key": f"{owner_type}:{owner_id}:{source_id}",
-            "owner_type": owner_type,
-            "owner_id": owner_id,
-            "owner_name": owner_name,
-            "source_id": source_id,
-            "title": _first_value(description.get("titles")),
-            "citation": _first_value(description.get("citations")),
-            "url": _text(description.get("about")),
-            "description": _first_value(description.get("descriptions")),
-            "source_notes": " | ".join(
-                _text(item.get("text"))
-                for item in description.get("notes") or []
-                if isinstance(item, dict) and item.get("text")
-            ),
-            "attribution_note": attribution,
-            "details_available": bool(description),
-        })
+        rows.append(
+            {
+                "source_key": f"{owner_type}:{owner_id}:{source_id}",
+                "owner_type": owner_type,
+                "owner_id": owner_id,
+                "owner_name": owner_name,
+                "source_id": source_id,
+                "title": _first_value(description.get("titles")),
+                "citation": _first_value(description.get("citations")),
+                "url": _text(description.get("about")),
+                "description": _first_value(description.get("descriptions")),
+                "source_notes": " | ".join(
+                    _text(item.get("text"))
+                    for item in description.get("notes") or []
+                    if isinstance(item, dict) and item.get("text")
+                ),
+                "attribution_note": attribution,
+                "details_available": bool(description),
+            }
+        )
         if description:
             _read_notes(
-                description, "source", source_id,
-                _first_value(description.get("titles")), notes,
+                description,
+                "source",
+                source_id,
+                _first_value(description.get("titles")),
+                notes,
             )
 
 
@@ -281,18 +345,21 @@ def _memory_rows(checkpoint, person_id, person_name, person, rows):
         descriptions = response.get("sourceDescriptions") or [None]
         for index, description in enumerate(descriptions):
             description = description if isinstance(description, dict) else {}
-            rows.append({
-                "memory_key": f"{person_id}:{evidence_id}:{index}",
-                "person_id": person_id,
-                "person_name": person_name,
-                "evidence_id": evidence_id,
-                "memory_id": memory_id,
-                "media_type": _text(description.get("mediaType")),
-                "title": _first_value(description.get("titles")),
-                "description": _first_value(description.get("descriptions")),
-                "url": _text(description.get("about")),
-                "details_available": bool(description),
-            })
+            rows.append(
+                {
+                    "memory_key": f"{person_id}:{evidence_id}:{index}",
+                    "person_id": person_id,
+                    "person_name": person_name,
+                    "evidence_id": evidence_id,
+                    "memory_id": memory_id,
+                    "media_type": _text(description.get("mediaType")),
+                    "title": _first_value(description.get("titles")),
+                    "description": _first_value(description.get("descriptions")),
+                    "url": _text(description.get("about")),
+                    "details_available": bool(description),
+                }
+            )
+
 
 def _write_csv(path, columns, rows):
     """Write generated tables atomically with a UTF-8 BOM for Excel/Numbers."""
@@ -316,10 +383,9 @@ def _review_rows(path):
                 "It has not been overwritten."
             )
         return {
-            row["event_key"]: {
-                key: row.get(key, "") for key in REVIEW_COLUMNS
-            }
-            for row in reader if row.get("event_key")
+            row["event_key"]: {key: row.get(key, "") for key in REVIEW_COLUMNS}
+            for row in reader
+            if row.get("event_key")
         }
 
 
@@ -333,11 +399,13 @@ def collect_reports(checkpoint, selected_ids=None):
     notes = []
     memories = []
 
-    for person_id in (checkpoint.completed_ids() if selected_ids is None else selected_ids):
+    for person_id in (
+        checkpoint.completed_ids() if selected_ids is None else selected_ids
+    ):
         document = checkpoint.get_response(PERSON_URL + person_id) or {}
         person = next(
-            (p for p in document.get("persons") or []
-             if p.get("id") == person_id), None,
+            (p for p in document.get("persons") or [] if p.get("id") == person_id),
+            None,
         )
         if not person:
             continue
@@ -345,24 +413,30 @@ def collect_reports(checkpoint, selected_ids=None):
         names[person_id] = name
         facts = person.get("facts") or []
         gender = (person.get("gender") or {}).get("type", "").rsplit("/", 1)[-1]
-        people.append({
-            "person_id": person_id,
-            "name": name,
-            "gender": gender,
-            "living": person.get("living", ""),
-            "events": len(facts),
-            "familysearch_url": f"https://www.familysearch.org/tree/person/details/{person_id}",
-        })
+        people.append(
+            {
+                "person_id": person_id,
+                "name": name,
+                "gender": gender,
+                "living": person.get("living", ""),
+                "events": len(facts),
+                "familysearch_url": f"https://www.familysearch.org/tree/person/details/{person_id}",
+            }
+        )
         person_notes = _cached_response(
             checkpoint, f"/platform/tree/persons/{person_id}/notes"
         )
         for entity in person_notes.get("persons") or []:
             _read_notes(entity, "person", person_id, name, notes)
         _owner_sources(
-            checkpoint, "person", person_id, name,
+            checkpoint,
+            "person",
+            person_id,
+            name,
             person.get("sources"),
             f"/platform/tree/persons/{person_id}/sources",
-            sources, notes,
+            sources,
+            notes,
         )
         _memory_rows(checkpoint, person_id, name, person, memories)
         seen = {}
@@ -372,20 +446,22 @@ def collect_reports(checkpoint, selected_ids=None):
             date = fact.get("date")
             year, date_status = year_for_sorting(date)
             original, formal, _ = _date_parts(date)
-            events.append({
-                "event_key": _event_key(person_id, fact, seen[digest]),
-                "year": year,
-                "date_status": date_status,
-                "person_id": person_id,
-                "person_name": name,
-                "event_type": _text(fact.get("type")).rsplit("/", 1)[-1],
-                "date_original": original,
-                "date_formal": formal,
-                "place": _place(fact),
-                "value": _text(fact.get("value")),
-                "source_references": _source_refs(fact),
-                "familysearch_url": f"https://www.familysearch.org/tree/person/details/{person_id}",
-            })
+            events.append(
+                {
+                    "event_key": _event_key(person_id, fact, seen[digest]),
+                    "year": year,
+                    "date_status": date_status,
+                    "person_id": person_id,
+                    "person_name": name,
+                    "event_type": _text(fact.get("type")).rsplit("/", 1)[-1],
+                    "date_original": original,
+                    "date_formal": formal,
+                    "place": _place(fact),
+                    "value": _text(fact.get("value")),
+                    "source_references": _source_refs(fact),
+                    "familysearch_url": f"https://www.familysearch.org/tree/person/details/{person_id}",
+                }
+            )
         for document_part in (
             document,
             checkpoint.get_response(FAMILIES_URL.format(person_id)) or {},
@@ -398,13 +474,15 @@ def collect_reports(checkpoint, selected_ids=None):
                         relations[key] = relationship
 
     people.sort(key=lambda item: (item["name"].casefold(), item["person_id"]))
-    events.sort(key=lambda item: (
-        item["year"] == "",
-        int(item["year"]) if item["year"] else 0,
-        item["person_name"].casefold(),
-        item["event_type"],
-        item["event_key"],
-    ))
+    events.sort(
+        key=lambda item: (
+            item["year"] == "",
+            int(item["year"]) if item["year"] else 0,
+            item["person_name"].casefold(),
+            item["event_type"],
+            item["event_key"],
+        )
+    )
 
     # A bounded scope should not list unselected people as if they had
     # been downloaded. Only keep relationships whose known endpoints are
@@ -412,13 +490,15 @@ def collect_reports(checkpoint, selected_ids=None):
     if selected_ids is not None:
         chosen = set(selected_ids)
         relations = {
-            key: relationship for key, relationship in relations.items()
+            key: relationship
+            for key, relationship in relations.items()
             if all(
                 identifier in chosen
                 for identifier in (
                     _member(relationship, field)
                     for field in ("person1", "person2", "parent1", "parent2", "child")
-                ) if identifier
+                )
+                if identifier
             )
         }
 
@@ -427,34 +507,47 @@ def collect_reports(checkpoint, selected_ids=None):
         first = _member(relationship, "person1")
         second = _member(relationship, "person2")
         date = next(
-            (fact.get("date") for fact in relationship.get("facts") or []
-             if isinstance(fact, dict) and fact.get("date")), None,
+            (
+                fact.get("date")
+                for fact in relationship.get("facts") or []
+                if isinstance(fact, dict) and fact.get("date")
+            ),
+            None,
         )
         place_fact = next(
-            (fact for fact in relationship.get("facts") or []
-             if isinstance(fact, dict) and fact.get("place")), {},
+            (
+                fact
+                for fact in relationship.get("facts") or []
+                if isinstance(fact, dict) and fact.get("place")
+            ),
+            {},
         )
         original, formal, _ = _date_parts(date)
-        relationships.append({
-            "relationship_key": key,
-            "relationship_type": (
-                _text(relationship.get("type")).rsplit("/", 1)[-1]
-                or "ChildAndParents"
-            ),
-            "person1_id": first,
-            "person1_name": names.get(first, ""),
-            "person2_id": second,
-            "person2_name": names.get(second, ""),
-            "parent1_id": _member(relationship, "parent1"),
-            "parent2_id": _member(relationship, "parent2"),
-            "child_id": _member(relationship, "child"),
-            "date_original": original,
-            "date_formal": formal,
-            "place": _place(place_fact),
-        })
-    relationships.sort(key=lambda item: (
-        item["relationship_type"], item["relationship_key"],
-    ))
+        relationships.append(
+            {
+                "relationship_key": key,
+                "relationship_type": (
+                    _text(relationship.get("type")).rsplit("/", 1)[-1]
+                    or "ChildAndParents"
+                ),
+                "person1_id": first,
+                "person1_name": names.get(first, ""),
+                "person2_id": second,
+                "person2_name": names.get(second, ""),
+                "parent1_id": _member(relationship, "parent1"),
+                "parent2_id": _member(relationship, "parent2"),
+                "child_id": _member(relationship, "child"),
+                "date_original": original,
+                "date_formal": formal,
+                "place": _place(place_fact),
+            }
+        )
+    relationships.sort(
+        key=lambda item: (
+            item["relationship_type"],
+            item["relationship_key"],
+        )
+    )
     for key, relation in relations.items():
         if relation.get("type") != "http://gedcomx.org/Couple":
             continue
@@ -464,18 +557,28 @@ def collect_reports(checkpoint, selected_ids=None):
         source_refs = relation.get("sources") or []
         source_owner_name = " / ".join(
             names.get(_member(relation, part), _member(relation, part))
-            for part in ("person1", "person2") if _member(relation, part)
+            for part in ("person1", "person2")
+            if _member(relation, part)
         )
         relationship_data = next(
-            (item for item in couple_details.get("relationships") or []
-             if item.get("id") == key), {},
+            (
+                item
+                for item in couple_details.get("relationships") or []
+                if item.get("id") == key
+            ),
+            {},
         )
         if relationship_data.get("sources"):
             source_refs = relationship_data["sources"]
         _owner_sources(
-            checkpoint, "couple", key, source_owner_name, source_refs,
+            checkpoint,
+            "couple",
+            key,
+            source_owner_name,
+            source_refs,
             f"/platform/tree/couple-relationships/{key}/sources",
-            sources, notes,
+            sources,
+            notes,
         )
         note_response = _cached_response(
             checkpoint, f"/platform/tree/couple-relationships/{key}/notes"
@@ -483,15 +586,26 @@ def collect_reports(checkpoint, selected_ids=None):
         for entity in note_response.get("relationships") or []:
             _read_notes(entity, "couple", key, source_owner_name, notes)
 
-    sources.sort(key=lambda row: (
-        row["owner_type"], row["owner_name"].casefold(), row["source_id"],
-    ))
-    notes.sort(key=lambda row: (
-        row["owner_type"], row["owner_name"].casefold(), row["note_key"],
-    ))
-    memories.sort(key=lambda row: (
-        row["person_name"].casefold(), row["memory_key"],
-    ))
+    sources.sort(
+        key=lambda row: (
+            row["owner_type"],
+            row["owner_name"].casefold(),
+            row["source_id"],
+        )
+    )
+    notes.sort(
+        key=lambda row: (
+            row["owner_type"],
+            row["owner_name"].casefold(),
+            row["note_key"],
+        )
+    )
+    memories.sort(
+        key=lambda row: (
+            row["person_name"].casefold(),
+            row["memory_key"],
+        )
+    )
 
     return {
         "people": people,
@@ -526,9 +640,14 @@ def export_reports(checkpoint, output, selected_ids=None):
     # Validate the manual review file before touching generated reports.
     reviews = _review_rows(paths["review"])
     for event in events:
-        reviews.setdefault(event["event_key"], {
-            "event_key": event["event_key"], "verified": "", "notes": "",
-        })
+        reviews.setdefault(
+            event["event_key"],
+            {
+                "event_key": event["event_key"],
+                "verified": "",
+                "notes": "",
+            },
+        )
 
     _write_csv(paths["people"], PEOPLE_COLUMNS, people)
     _write_csv(paths["events"], EVENT_COLUMNS, events)
@@ -537,7 +656,8 @@ def export_reports(checkpoint, output, selected_ids=None):
     _write_csv(paths["notes"], NOTE_COLUMNS, notes)
     _write_csv(paths["memories"], MEMORY_COLUMNS, memories)
     _write_csv(
-        paths["review"], REVIEW_COLUMNS,
+        paths["review"],
+        REVIEW_COLUMNS,
         [reviews[key] for key in sorted(reviews)],
     )
     return {

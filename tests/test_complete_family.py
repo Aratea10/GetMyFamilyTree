@@ -1,4 +1,5 @@
 """Regression tests for complete family traversal (no FamilySearch login required)."""
+
 import io
 import tempfile
 import unittest
@@ -67,25 +68,24 @@ class FakeSession:
 
 class CompleteFamilyTests(unittest.TestCase):
     def test_person_display_name_prefers_familysearch_display(self):
-        document = {"persons": [
-            {"id": "AAAA-111", "display": {"name": "Maria   da   Silva"}},
-        ]}
-        self.assertEqual(
-            person_display_name(document, "AAAA-111"), "Maria da Silva"
-        )
+        document = {
+            "persons": [
+                {"id": "AAAA-111", "display": {"name": "Maria   da   Silva"}},
+            ]
+        }
+        self.assertEqual(person_display_name(document, "AAAA-111"), "Maria da Silva")
 
     def test_person_display_name_accepts_gedcomx_full_text(self):
-        document = {"persons": [
-            {"id": "AAAA-111", "names": [{
-                "nameForms": [{"fullText": "Ana Goncalves"}]
-            }]}
-        ]}
-        self.assertEqual(
-            person_display_name(document, "AAAA-111"), "Ana Goncalves"
-        )
-        self.assertEqual(
-            person_display_name(document, "BBBB-222"), "BBBB-222"
-        )
+        document = {
+            "persons": [
+                {
+                    "id": "AAAA-111",
+                    "names": [{"nameForms": [{"fullText": "Ana Goncalves"}]}],
+                }
+            ]
+        }
+        self.assertEqual(person_display_name(document, "AAAA-111"), "Ana Goncalves")
+        self.assertEqual(person_display_name(document, "BBBB-222"), "BBBB-222")
 
     def test_every_person_is_reported_by_default(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -98,9 +98,7 @@ class CompleteFamilyTests(unittest.TestCase):
                 checkpoint.seed(["AAAA-111"])
                 output = io.StringIO()
                 with redirect_stderr(output):
-                    self.assertFalse(
-                        crawl(checkpoint, session, max_people=2)
-                    )
+                    self.assertFalse(crawl(checkpoint, session, max_people=2))
                 progress = output.getvalue()
                 self.assertIn("Starting exploration: 0 already explored", progress)
                 self.assertIn("Exploring 1/2: AAAA-111...", progress)
@@ -202,13 +200,9 @@ class CompleteFamilyTests(unittest.TestCase):
                     ],
                     "relationships": [],
                 }
-                store.save_response(
-                    "/platform/tree/persons?pids=AAAA-111", document
-                )
+                store.save_response("/platform/tree/persons?pids=AAAA-111", document)
                 replay = ReplaySession(FakeSession(), store)
-                result = replay.get_url(
-                    "/platform/tree/persons?pids=AAAA-111"
-                )
+                result = replay.get_url("/platform/tree/persons?pids=AAAA-111")
                 self.assertEqual(
                     [person["id"] for person in result["persons"]],
                     ["AAAA-111"],
@@ -249,12 +243,19 @@ class CompleteFamilyTests(unittest.TestCase):
                 self.assertTrue(crawl(store, session, max_people=0, progress=0))
                 output = Path(folder) / "family.ged"
                 people, families = assemble(
-                    store, session, output, no_sources=True, no_notes=True, no_contributors=True
+                    store,
+                    session,
+                    output,
+                    no_sources=True,
+                    no_notes=True,
+                    no_contributors=True,
                 )
                 gedcom = output.read_text(encoding="utf-8")
                 self.assertEqual(people, 4)
                 self.assertGreaterEqual(families, 2)
-                self.assertEqual(sum(line.endswith(" INDI") for line in gedcom.splitlines()), 4)
+                self.assertEqual(
+                    sum(line.endswith(" INDI") for line in gedcom.splitlines()), 4
+                )
                 self.assertIn("1 _FSFTID CCCC-333", gedcom)
                 self.assertIn("1 _FSFTID DDDD-444", gedcom)
                 self.assertIn("1 CHIL @I", gedcom)
@@ -278,9 +279,7 @@ class CompleteFamilyTests(unittest.TestCase):
                 if url == "/platform/tree/persons/AAAA-111/families":
                     self.calls.append(url)
                     return {
-                        "persons": [
-                            {"id": "EEEE-555", "living": False, "names": []}
-                        ],
+                        "persons": [{"id": "EEEE-555", "living": False, "names": []}],
                         "relationships": [
                             {
                                 "id": "parent-child-extra",
@@ -301,8 +300,12 @@ class CompleteFamilyTests(unittest.TestCase):
                 self.assertEqual(store.count("done"), 5)
                 output = Path(folder) / "family.ged"
                 people, families = assemble(
-                    store, session, output,
-                    no_notes=True, no_sources=True, no_contributors=True
+                    store,
+                    session,
+                    output,
+                    no_notes=True,
+                    no_sources=True,
+                    no_contributors=True,
                 )
                 gedcom = output.read_text(encoding="utf-8")
                 self.assertEqual(people, 5)
@@ -317,49 +320,69 @@ class CompleteFamilyTests(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.records["AAAA-111"] = {
-                    "persons": [{
-                        "id": "AAAA-111",
-                        "living": False,
-                        "names": [],
-                        "facts": [{
-                            "type": "http://gedcomx.org/Birth",
-                            "date": {"original": "1 JAN 1900"},
-                            "place": {"original": "Galicia"},
-                            "attribution": {},
-                        }],
-                        "sources": [{"descriptionId": "S01"}],
-                        "evidence": [{"id": "M1234-1"}],
-                    }]
+                    "persons": [
+                        {
+                            "id": "AAAA-111",
+                            "living": False,
+                            "names": [],
+                            "facts": [
+                                {
+                                    "type": "http://gedcomx.org/Birth",
+                                    "date": {"original": "1 JAN 1900"},
+                                    "place": {"original": "Galicia"},
+                                    "attribution": {},
+                                }
+                            ],
+                            "sources": [{"descriptionId": "S01"}],
+                            "evidence": [{"id": "M1234-1"}],
+                        }
+                    ]
                 }
 
             def get_url(self, url, headers=None, no_api=False):
                 if url == "/platform/tree/persons/AAAA-111/sources":
                     return {
-                        "persons": [{"sources": [{
-                            "descriptionId": "S01",
-                            "attribution": {},
-                        }]}],
-                        "sourceDescriptions": [{
-                            "id": "S01",
-                            "titles": [{"value": "Birth certificate"}],
-                            "citations": [{"value": "Registry office"}],
-                        }],
+                        "persons": [
+                            {
+                                "sources": [
+                                    {
+                                        "descriptionId": "S01",
+                                        "attribution": {},
+                                    }
+                                ]
+                            }
+                        ],
+                        "sourceDescriptions": [
+                            {
+                                "id": "S01",
+                                "titles": [{"value": "Birth certificate"}],
+                                "citations": [{"value": "Registry office"}],
+                            }
+                        ],
                     }
                 if url == "/platform/tree/persons/AAAA-111/notes":
                     return {
-                        "persons": [{"notes": [{
-                            "subject": "Research note",
-                            "text": "Original note text",
-                        }]}]
+                        "persons": [
+                            {
+                                "notes": [
+                                    {
+                                        "subject": "Research note",
+                                        "text": "Original note text",
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 if url == "/platform/memories/memories/M1234":
                     return {
-                        "sourceDescriptions": [{
-                            "mediaType": "image/jpeg",
-                            "links": {},
-                            "about": "https://example.org/memory",
-                            "titles": [{"value": "Historical photo"}],
-                        }]
+                        "sourceDescriptions": [
+                            {
+                                "mediaType": "image/jpeg",
+                                "links": {},
+                                "about": "https://example.org/memory",
+                                "titles": [{"value": "Historical photo"}],
+                            }
+                        ]
                     }
                 return super().get_url(url, headers, no_api)
 
@@ -373,18 +396,22 @@ class CompleteFamilyTests(unittest.TestCase):
                 assemble(store, session, output, workers=1, no_contributors=True)
                 gedcom = output.read_text(encoding="utf-8")
                 for field in (
-                    "1 BIRT", "2 DATE 1 JAN 1900", "2 PLAC Galicia",
-                    "Birth certificate", "Registry office",
-                    "Original note text", "Historical photo",
+                    "1 BIRT",
+                    "2 DATE 1 JAN 1900",
+                    "2 PLAC Galicia",
+                    "Birth certificate",
+                    "Registry office",
+                    "Original note text",
+                    "Historical photo",
                     "https://example.org/memory",
                 ):
                     self.assertIn(field, gedcom)
-                self.assertIsNotNone(store.get_response(
-                    "0::/platform/tree/persons/AAAA-111/sources"
-                ))
-                self.assertIsNotNone(store.get_response(
-                    "0::/platform/tree/persons/AAAA-111/notes"
-                ))
+                self.assertIsNotNone(
+                    store.get_response("0::/platform/tree/persons/AAAA-111/sources")
+                )
+                self.assertIsNotNone(
+                    store.get_response("0::/platform/tree/persons/AAAA-111/notes")
+                )
             finally:
                 store.close()
 
@@ -395,9 +422,7 @@ class CompleteFamilyTests(unittest.TestCase):
             ids = [f"F000-{number:03d}" for number in range(1, 203)]
             try:
                 for fid in ids:
-                    document = {
-                        "persons": [{"id": fid, "living": False, "names": []}]
-                    }
+                    document = {"persons": [{"id": fid, "living": False, "names": []}]}
                     if fid == ids[0]:
                         document["childAndParentsRelationships"] = [
                             {
@@ -406,16 +431,18 @@ class CompleteFamilyTests(unittest.TestCase):
                                 "parent1": {"resourceId": ids[-1]},
                             }
                         ]
-                    store.save_response(
-                        "/platform/tree/persons?pids=" + fid, document
-                    )
+                    store.save_response("/platform/tree/persons?pids=" + fid, document)
                 store.seed(ids)
                 for fid in ids:
                     store.finish(fid, [])
                 output = Path(folder) / "large.ged"
                 people, families = assemble(
-                    store, session, output, no_sources=True,
-                    no_notes=True, no_contributors=True
+                    store,
+                    session,
+                    output,
+                    no_sources=True,
+                    no_notes=True,
+                    no_contributors=True,
                 )
                 data = output.read_text(encoding="utf-8")
                 self.assertEqual(people, len(ids))
@@ -423,8 +450,7 @@ class CompleteFamilyTests(unittest.TestCase):
                 self.assertIn("1 _FSFTID " + ids[0], data)
                 self.assertIn("1 _FSFTID " + ids[-1], data)
                 self.assertEqual(
-                    sum(line.endswith(" INDI") for line in data.splitlines()),
-                    len(ids)
+                    sum(line.endswith(" INDI") for line in data.splitlines()), len(ids)
                 )
                 self.assertIn("1 CHIL @I", data)
             finally:

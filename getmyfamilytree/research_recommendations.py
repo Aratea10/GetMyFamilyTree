@@ -30,6 +30,7 @@ def _parentage_family(person_id, parents, children):
     ancestors = _distances([person_id], parents)
     return set(_distances(ancestors, children))
 
+
 def _sex(document, fid):
     person = next(
         (person for person in document.get("persons", []) if person.get("id") == fid),
@@ -44,22 +45,13 @@ def build_recommendations(checkpoint, identifiers):
     known = set(identifiers)
     origin = checkpoint.get_origin()
 
-    request_keys = [
-        PERSON_URL + fid
-        for fid in identifiers
-    ]
+    request_keys = [PERSON_URL + fid for fid in identifiers]
 
-    request_keys.extend(
-        FAMILIES_URL.format(fid)
-        for fid in identifiers
-    )
+    request_keys.extend(FAMILIES_URL.format(fid) for fid in identifiers)
 
     cached = checkpoint.get_responses(request_keys)
 
-    documents = {
-        fid: cached.get(PERSON_URL + fid) or {}
-        for fid in identifiers
-    }
+    documents = {fid: cached.get(PERSON_URL + fid) or {} for fid in identifiers}
 
     names = {fid: _person_name(documents[fid], fid) for fid in identifiers}
     sexes = {fid: _sex(documents[fid], fid) for fid in identifiers}
@@ -99,15 +91,11 @@ def build_recommendations(checkpoint, identifiers):
 
     # Do not guess paternal/maternal labels when parentage
     # is incomplete or ambiguous.
-    root_sides = {fid: "unknown" for fid in roots}
+    root_sides = dict.fromkeys(roots, "unknown")
 
-    if len(roots) == 2 and {
-        sexes[fid] for fid in roots
-    } == {"male", "female"}:
+    if len(roots) == 2 and {sexes[fid] for fid in roots} == {"male", "female"}:
         for fid in roots:
-            root_sides[fid] = (
-                "paternal" if sexes[fid] == "male" else "maternal"
-            )
+            root_sides[fid] = "paternal" if sexes[fid] == "male" else "maternal"
 
     family = _parentage_family(origin, parents, children) if origin in known else set()
 
@@ -126,7 +114,6 @@ def build_recommendations(checkpoint, identifiers):
 
     blood_distance = _distances([origin], blood_links) if origin in known else {}
 
-
     by_marriage = defaultdict(set)
     inlaw_distance = {}
     affinity_links = defaultdict(set)
@@ -136,57 +123,38 @@ def build_recommendations(checkpoint, identifiers):
 
     for blood_person in family:
         for spouse_id in partners.get(blood_person, ()):
-            blood_relatives_by_partner[spouse_id].add(
-                blood_person
-            )
+            blood_relatives_by_partner[spouse_id].add(blood_person)
 
     # Process each partner without retaining every family graph.
-    for spouse_id, blood_relatives in sorted(
-        blood_relatives_by_partner.items()
-    ):
-        relatives = _parentage_family(
-            spouse_id, parents, children
-        )
+    for spouse_id, blood_relatives in sorted(blood_relatives_by_partner.items()):
+        relatives = _parentage_family(spouse_id, parents, children)
 
         external_relatives = relatives - family
 
         if not external_relatives:
             continue
 
-        restricted_links = {
-            fid: blood_links[fid] & relatives
-            for fid in relatives
-        }
+        restricted_links = {fid: blood_links[fid] & relatives for fid in relatives}
 
-        spouse_distances = _distances(
-            [spouse_id], restricted_links
-        )
+        spouse_distances = _distances([spouse_id], restricted_links)
 
         branch_ids = set()
 
         for blood_person in blood_relatives:
-            branch_ids.update(
-                memberships.get(blood_person, ())
-            )
+            branch_ids.update(memberships.get(blood_person, ()))
 
         closest_blood_distance = min(
-            blood_distance.get(blood_person, 10_000)
-            for blood_person in blood_relatives
+            blood_distance.get(blood_person, 10_000) for blood_person in blood_relatives
         )
 
-        links = {
-            (blood_person, spouse_id)
-            for blood_person in blood_relatives
-        }
+        links = {(blood_person, spouse_id) for blood_person in blood_relatives}
 
         for relative in external_relatives:
             by_marriage[relative].update(branch_ids)
             affinity_links[relative].update(links)
 
             distance = (
-                closest_blood_distance
-                + 1
-                + spouse_distances.get(relative, 10_000)
+                closest_blood_distance + 1 + spouse_distances.get(relative, 10_000)
             )
 
             inlaw_distance[relative] = min(

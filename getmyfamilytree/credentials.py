@@ -1,9 +1,12 @@
-"""Store FamilySearch login details in the operating system's credential vault.
+"""Store FamilySearch login details in the operating system's credential vault
 
 Credentials are only saved when the user explicitly selects --remember-login.
 Nothing is written to a project file, shell history, or GEDCOM checkpoint.
 """
+
 from __future__ import annotations
+
+import contextlib
 
 import keyring
 from keyring.errors import KeyringError, PasswordDeleteError
@@ -13,7 +16,7 @@ USERNAME_ENTRY = "__saved_username__"
 
 
 class CredentialStoreError(Exception):
-    """The system credential store could not complete an operation."""
+    """The system credential store could not complete an operation"""
 
 
 class CredentialStore:
@@ -21,7 +24,7 @@ class CredentialStore:
         self.backend = backend if backend is not None else keyring
 
     def load(self):
-        """Return (username, password) or None if no account is saved."""
+        """Return (username, password) or None if no account is saved"""
         try:
             username = self.backend.get_password(SERVICE, USERNAME_ENTRY)
             if not username:
@@ -34,7 +37,7 @@ class CredentialStore:
         return username, password
 
     def save(self, username, password):
-        """Save credentials only after a successful login and explicit opt-in."""
+        """Save credentials only after a successful login and explicit opt-in"""
         try:
             previous_user = self.backend.get_password(SERVICE, USERNAME_ENTRY)
             # Write the secret first. A missing account pointer is harmless;
@@ -42,12 +45,12 @@ class CredentialStore:
             self.backend.set_password(SERVICE, username, password)
             self.backend.set_password(SERVICE, USERNAME_ENTRY, username)
             if previous_user and previous_user != username:
-                try:
+                with contextlib.suppress(PasswordDeleteError):
                     self.backend.delete_password(SERVICE, previous_user)
-                except PasswordDeleteError:
-                    pass
         except KeyringError as exc:
-            raise CredentialStoreError("Cannot save credentials in the system keyring.") from exc
+            raise CredentialStoreError(
+                "Cannot save credentials in the system keyring."
+            ) from exc
 
     def clear(self):
         """Remove the account this tool last saved; return whether it existed."""
@@ -55,11 +58,11 @@ class CredentialStore:
             username = self.backend.get_password(SERVICE, USERNAME_ENTRY)
             if not username:
                 return False
-            try:
+            with contextlib.suppress(PasswordDeleteError):
                 self.backend.delete_password(SERVICE, username)
-            except PasswordDeleteError:
-                pass
             self.backend.delete_password(SERVICE, USERNAME_ENTRY)
         except KeyringError as exc:
-            raise CredentialStoreError("Cannot remove credentials from the system keyring.") from exc
+            raise CredentialStoreError(
+                "Cannot remove credentials from the system keyring."
+            ) from exc
         return True

@@ -46,7 +46,9 @@ class RecommendationTests(unittest.TestCase):
             gender = (
                 "Male"
                 if fid == "FATH-111"
-                else "Female" if fid == "MOTH-111" else "Unknown"
+                else "Female"
+                if fid == "MOTH-111"
+                else "Unknown"
             )
 
             self.store.save_response(
@@ -318,6 +320,7 @@ class RecommendationTests(unittest.TestCase):
                 }
             ],
         )
+
 
 if __name__ == "__main__":
     unittest.main()

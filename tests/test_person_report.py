@@ -1,4 +1,5 @@
-"""The default review keeps everything with each person in one text document."""
+"""The default review keeps everything with each person in one text document"""
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,42 +44,66 @@ class PersonReviewTests(unittest.TestCase):
         )
         self.store.save_response(
             "/platform/tree/persons?pids=BBBB-222",
-            {"persons": [{
-                "id": "BBBB-222", "display": {"name": "José"},
-                "facts": [], "living": False,
-            }]},
+            {
+                "persons": [
+                    {
+                        "id": "BBBB-222",
+                        "display": {"name": "José"},
+                        "facts": [],
+                        "living": False,
+                    }
+                ]
+            },
         )
         self.store.save_response(
             "/platform/tree/persons/AAAA-111/families",
-            {"relationships": [{
-                "id": "couple-1",
-                "type": "http://gedcomx.org/Couple",
-                "person1": {"resourceId": "AAAA-111"},
-                "person2": {"resourceId": "BBBB-222"},
-            }]},
+            {
+                "relationships": [
+                    {
+                        "id": "couple-1",
+                        "type": "http://gedcomx.org/Couple",
+                        "person1": {"resourceId": "AAAA-111"},
+                        "person2": {"resourceId": "BBBB-222"},
+                    }
+                ]
+            },
         )
         self.store.save_response(
             "0::/platform/tree/persons/AAAA-111/sources",
-            {"sourceDescriptions": [{
-                "id": "SRC1",
-                "titles": [{"value": "Libro de bautismos"}],
-                "citations": [{"value": "Parroquia de Darbo, folio 4"}],
-                "about": "https://www.familysearch.org/ark:/61903/1:1:ABCDE",
-            }]},
+            {
+                "sourceDescriptions": [
+                    {
+                        "id": "SRC1",
+                        "titles": [{"value": "Libro de bautismos"}],
+                        "citations": [{"value": "Parroquia de Darbo, folio 4"}],
+                        "about": "https://www.familysearch.org/ark:/61903/1:1:ABCDE",
+                    }
+                ]
+            },
         )
         self.store.save_response(
             "0::/platform/tree/persons/AAAA-111/notes",
-            {"persons": [{
-                "notes": [{"id": "NOTE1", "text": "Comprobar asiento original"}],
-            }]},
+            {
+                "persons": [
+                    {
+                        "notes": [
+                            {"id": "NOTE1", "text": "Comprobar asiento original"}
+                        ],
+                    }
+                ]
+            },
         )
         self.store.save_response(
             "0::/platform/memories/memories/M123",
-            {"sourceDescriptions": [{
-                "mediaType": "image/jpeg",
-                "titles": [{"value": "Fotografía de familia"}],
-                "about": "https://www.familysearch.org/photos/artifacts/123",
-            }]},
+            {
+                "sourceDescriptions": [
+                    {
+                        "mediaType": "image/jpeg",
+                        "titles": [{"value": "Fotografía de familia"}],
+                        "about": "https://www.familysearch.org/photos/artifacts/123",
+                    }
+                ]
+            },
         )
         self.store.finish("AAAA-111", [])
         self.store.finish("BBBB-222", [])
@@ -117,26 +142,28 @@ class PersonReviewTests(unittest.TestCase):
         original = path.read_text(encoding="utf-8")
         original = original.replace(
             "<!-- review:start AAAA-111 -->\n",
-            "<!-- review:start AAAA-111 -->\n"
-            "Comprobado con la partida original.\n",
+            "<!-- review:start AAAA-111 -->\nComprobado con la partida original.\n",
         )
         original = original.replace(
-            "- [ ] 1892", "- [x] 1892",
+            "- [ ] 1892",
+            "- [x] 1892",
         )
         path.write_text(original, encoding="utf-8")
 
-        self.alice["facts"].append({
-            "id": "residence",
-            "type": "http://gedcomx.org/Residence",
-            "date": {"original": "1900"},
-        })
+        self.alice["facts"].append(
+            {
+                "id": "residence",
+                "type": "http://gedcomx.org/Residence",
+                "date": {"original": "1900"},
+            }
+        )
         self.store.save_response(
             "/platform/tree/persons?pids=AAAA-111",
             {"persons": [self.alice]},
         )
-        new_text = write_person_report(self.store, self.output, "es")[
-            "path"
-        ].read_text(encoding="utf-8")
+        new_text = write_person_report(self.store, self.output, "es")["path"].read_text(
+            encoding="utf-8"
+        )
         self.assertIn("Comprobado con la partida original.", new_text)
         self.assertIn("- [x] 1892", new_text)
         self.assertIn("1900", new_text)
@@ -149,19 +176,18 @@ class PersonReviewTests(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
         text = text.replace(
             "<!-- review:start BBBB-222 -->\n",
-            "<!-- review:start BBBB-222 -->\n"
-            "He comprobado el registro de José.\n",
+            "<!-- review:start BBBB-222 -->\nHe comprobado el registro de José.\n",
         )
         path.write_text(text, encoding="utf-8")
 
-        write_person_report(
-            self.store, self.output, "es", selected_ids=["AAAA-111"]
-        )
+        write_person_report(self.store, self.output, "es", selected_ids=["AAAA-111"])
         limited = path.read_text(encoding="utf-8")
         self.assertNotIn("He comprobado el registro de José.", limited)
 
         write_person_report(
-            self.store, self.output, "es",
+            self.store,
+            self.output,
+            "es",
             selected_ids=["AAAA-111", "BBBB-222"],
         )
         restored = path.read_text(encoding="utf-8")
@@ -172,9 +198,9 @@ class PersonReviewTests(unittest.TestCase):
         )
 
     def test_english_language_does_not_change_person_data(self):
-        text = write_person_report(self.store, self.output, "en")[
-            "path"
-        ].read_text(encoding="utf-8")
+        text = write_person_report(self.store, self.output, "en")["path"].read_text(
+            encoding="utf-8"
+        )
         self.assertIn("## Chronological index", text)
         self.assertIn("#### Relationships", text)
         self.assertIn("María da Silva", text)
@@ -188,9 +214,7 @@ class PersonReviewTests(unittest.TestCase):
         self.assertFalse((self.folder / "GetMyFamilyTree.events.csv").exists())
 
     def test_export_folder_and_explicit_file_paths(self):
-        self.assertEqual(
-            resolve_output_path(self.folder), self.output
-        )
+        self.assertEqual(resolve_output_path(self.folder), self.output)
         self.assertEqual(resolve_output_path(self.output), self.output)
         with self.assertRaises(ValueError):
             resolve_output_path(self.folder / "tree.xlsx")

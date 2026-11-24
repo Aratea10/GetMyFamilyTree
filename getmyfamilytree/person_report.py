@@ -3,12 +3,13 @@
 All relationship, source, note and memory details stay with their person.
 The review checklist enclosed by explicit markers survives regeneration.
 """
+
 from __future__ import annotations
 
-from collections import defaultdict
 import os
-from pathlib import Path
 import re
+from collections import defaultdict
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from getmyfamilytree.reports import collect_reports
@@ -74,10 +75,7 @@ def _event_checklist(events, existing, language):
             continue
         label = _label(event["event_type"], language)
         year = event["year"] or ("Sin año" if language == "es" else "No year")
-        items.append(
-            f"- [ ] {_md(year)} · {_md(label)} "
-            f"(`{_md(event['event_key'])}`)"
-        )
+        items.append(f"- [ ] {_md(year)} · {_md(label)} (`{_md(event['event_key'])}`)")
     previous = existing.strip("\n")
     return "\n".join(part for part in (previous, *items) if part)
 
@@ -119,6 +117,7 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
         memory_by_person[memory["person_id"]].append(memory)
 
     people_by_id = {person["person_id"]: person for person in people}
+
     def name_for(identifier):
         return people_by_id.get(identifier, {}).get("name") or identifier
 
@@ -142,8 +141,8 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
         (
             "> Informe generado a partir del progreso guardado. No modifica el GEDCOM. "
             "Los datos y las fuentes no equivalen a una verificación documental."
-            if es else
-            "> Generated from cached research data. The GEDCOM is unchanged. "
+            if es
+            else "> Generated from cached research data. The GEDCOM is unchanged. "
             "The records and sources are not themselves independent verification."
         ),
         "",
@@ -158,13 +157,17 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
         (
             "Los años dudosos son solo referencias para ordenar. "
             "La fecha original se mantiene en cada ficha."
-            if es else
-            "Uncertain years are only sorting references. "
+            if es
+            else "Uncertain years are only sorting references. "
             "Each person's original dates are retained."
         ),
         "",
-        "| " + ("Año | Acontecimiento | Persona | Fecha original |" if es
-                else "Year | Event | Person | Original date |"),
+        "| "
+        + (
+            "Año | Acontecimiento | Persona | Fecha original |"
+            if es
+            else "Year | Event | Person | Original date |"
+        ),
         "| --- | --- | --- | --- |",
     ]
 
@@ -178,43 +181,43 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
             f"{_md(event['date_original'])} |"
         )
 
-    lines.extend([
-        "",
-        "## " + ("Fichas por persona" if es else "Person records"),
-        "",
-        (
-            "Las fichas se ordenan por el año de nacimiento disponible. "
-            "Sin año de nacimiento, se muestran al final. "
-            "Escribe tus comprobaciones únicamente dentro de cada bloque "
-            "«Mi revisión»; ese contenido se conserva al regenerar el archivo."
-            if es else
-            "People are ordered by their available birth year, with undated "
-            "people last. Write your own notes only inside each 'My review' "
-            "block: those sections are preserved when regenerating the file."
-        ),
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## " + ("Fichas por persona" if es else "Person records"),
+            "",
+            (
+                "Las fichas se ordenan por el año de nacimiento disponible. "
+                "Sin año de nacimiento, se muestran al final. "
+                "Escribe tus comprobaciones únicamente dentro de cada bloque "
+                "«Mi revisión»; ese contenido se conserva al regenerar el archivo."
+                if es
+                else "People are ordered by their available birth year, with undated "
+                "people last. Write your own notes only inside each 'My review' "
+                "block: those sections are preserved when regenerating the file."
+            ),
+            "",
+        ]
+    )
 
     for person in people:
         fid = person["person_id"]
         events_here = event_by_person[fid]
-        lines.extend([
-            f'<a id="persona-{fid.lower()}"></a>',
-            "",
-            f"### {_md(person['name'])} (`{_md(fid)}`)",
-            "",
-            "**FamilySearch:** " + _link(person["familysearch_url"],
-                                        person["familysearch_url"]),
-            "",
-        ])
+        lines.extend(
+            [
+                f'<a id="persona-{fid.lower()}"></a>',
+                "",
+                f"### {_md(person['name'])} (`{_md(fid)}`)",
+                "",
+                "**FamilySearch:** "
+                + _link(person["familysearch_url"], person["familysearch_url"]),
+                "",
+            ]
+        )
         if person["gender"]:
-            lines.append(
-                f"**{'Sexo' if es else 'Sex'}:** {_md(person['gender'])}"
-            )
+            lines.append(f"**{'Sexo' if es else 'Sex'}:** {_md(person['gender'])}")
         if person["living"] != "":
-            lines.append(
-                f"**{'Vive' if es else 'Living'}:** {_md(person['living'])}"
-            )
+            lines.append(f"**{'Vive' if es else 'Living'}:** {_md(person['living'])}")
 
         lines.extend(["", "#### " + ("Parentescos" if es else "Relationships"), ""])
         rel_lines = []
@@ -226,24 +229,43 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
             if kind == "Couple" and fid in (first, second):
                 other = second if fid == first else first
                 rel_lines.append(
-                    "- " + ("Pareja" if es else "Partner")
-                    + ": " + relative(other) + f" — `{_md(relation['relationship_key'])}`"
+                    "- "
+                    + ("Pareja" if es else "Partner")
+                    + ": "
+                    + relative(other)
+                    + f" — `{_md(relation['relationship_key'])}`"
                 )
                 for source in sources:
-                    if (source["owner_type"] == "couple"
-                            and source["owner_id"] == relation["relationship_key"]):
+                    if (
+                        source["owner_type"] == "couple"
+                        and source["owner_id"] == relation["relationship_key"]
+                    ):
                         rel_lines.append(
-                            "  - " + ("Fuente de la pareja" if es else "Couple source")
-                            + ": " + _md(source["title"] or source["source_id"])
-                            + (f" — {_md(source['citation'])}" if source["citation"] else "")
-                            + (f" — {_link(source['url'], 'Abrir' if es else 'Open')}" if source["url"] else "")
+                            "  - "
+                            + ("Fuente de la pareja" if es else "Couple source")
+                            + ": "
+                            + _md(source["title"] or source["source_id"])
+                            + (
+                                f" — {_md(source['citation'])}"
+                                if source["citation"]
+                                else ""
+                            )
+                            + (
+                                f" — {_link(source['url'], 'Abrir' if es else 'Open')}"
+                                if source["url"]
+                                else ""
+                            )
                         )
                 for note in notes:
-                    if (note["owner_type"] == "couple"
-                            and note["owner_id"] == relation["relationship_key"]):
+                    if (
+                        note["owner_type"] == "couple"
+                        and note["owner_id"] == relation["relationship_key"]
+                    ):
                         rel_lines.append(
-                            "  - " + ("Nota de la pareja" if es else "Couple note")
-                            + ": " + _md(note["text"])
+                            "  - "
+                            + ("Nota de la pareja" if es else "Couple note")
+                            + ": "
+                            + _md(note["text"])
                         )
             elif child and kind == "ChildAndParents":
                 if fid == child:
@@ -263,22 +285,33 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
                     )
                 elif fid == second and first:
                     rel_lines.append(
-                        "- " + ("Progenitor" if es else "Parent") + ": " + relative(first)
+                        "- "
+                        + ("Progenitor" if es else "Parent")
+                        + ": "
+                        + relative(first)
                     )
-        lines.extend(sorted(set(rel_lines)) or [
-            "- " + ("Sin vínculos recuperados." if es else "No cached relationships.")
-        ])
+        lines.extend(
+            sorted(set(rel_lines))
+            or [
+                "- "
+                + ("Sin vínculos recuperados." if es else "No cached relationships.")
+            ]
+        )
 
-        lines.extend([
-            "", "#### " + ("Acontecimientos" if es else "Events"), "",
-        ])
+        lines.extend(
+            [
+                "",
+                "#### " + ("Acontecimientos" if es else "Events"),
+                "",
+            ]
+        )
         for event in events_here:
             label = _label(event["event_type"], language)
             year = event["year"] or ("Sin año" if es else "No year")
             parts = [
-                _md(item) for item in (
-                    event["date_original"], event["place"], event["value"]
-                ) if item
+                _md(item)
+                for item in (event["date_original"], event["place"], event["value"])
+                if item
             ]
             lines.append(
                 f"- **{_md(year)} · {_md(label)}**"
@@ -287,56 +320,89 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
             )
             if event["date_status"] not in ("stated_year", "formal_year"):
                 lines.append(
-                    "  - " + ("Precisión de la fecha" if es else "Date certainty")
-                    + ": `" + _md(event["date_status"]) + "`"
+                    "  - "
+                    + ("Precisión de la fecha" if es else "Date certainty")
+                    + ": `"
+                    + _md(event["date_status"])
+                    + "`"
                 )
             if event["date_formal"]:
                 lines.append(
-                    "  - " + ("Fecha formal" if es else "Formal date")
-                    + ": `" + _md(event["date_formal"]) + "`"
+                    "  - "
+                    + ("Fecha formal" if es else "Formal date")
+                    + ": `"
+                    + _md(event["date_formal"])
+                    + "`"
                 )
             if event["source_references"]:
                 lines.append(
-                    "  - " + ("Referencias de fuentes del hecho" if es
-                             else "Event source references")
-                    + ": " + _md(event["source_references"])
+                    "  - "
+                    + (
+                        "Referencias de fuentes del hecho"
+                        if es
+                        else "Event source references"
+                    )
+                    + ": "
+                    + _md(event["source_references"])
                 )
         if not events_here:
-            lines.append("- " + ("Sin acontecimientos recuperados." if es
-                                 else "No cached events."))
+            lines.append(
+                "- "
+                + ("Sin acontecimientos recuperados." if es else "No cached events.")
+            )
 
         lines.extend(["", "#### " + ("Fuentes" if es else "Sources"), ""])
         for source in source_by_person[fid]:
             title = source["title"] or source["source_id"]
             lines.append(f"- **{_md(title)}** (`{_md(source['source_id'])}`)")
             if source["citation"]:
-                lines.append("  - " + ("Cita" if es else "Citation")
-                             + ": " + _md(source["citation"]))
+                lines.append(
+                    "  - "
+                    + ("Cita" if es else "Citation")
+                    + ": "
+                    + _md(source["citation"])
+                )
             if source["description"]:
-                lines.append("  - " + ("Descripción" if es else "Description")
-                             + ": " + _md(source["description"]))
+                lines.append(
+                    "  - "
+                    + ("Descripción" if es else "Description")
+                    + ": "
+                    + _md(source["description"])
+                )
             if source["url"]:
-                lines.append("  - " + _link(source["url"],
-                                          "Abrir documento" if es else "Open document"))
+                lines.append(
+                    "  - "
+                    + _link(source["url"], "Abrir documento" if es else "Open document")
+                )
             if source["source_notes"]:
-                lines.append("  - " + ("Notas de fuente" if es else "Source notes")
-                             + ": " + _md(source["source_notes"]))
+                lines.append(
+                    "  - "
+                    + ("Notas de fuente" if es else "Source notes")
+                    + ": "
+                    + _md(source["source_notes"])
+                )
             if source["details_available"] is False:
-                lines.append("  - " + ("Detalles no recuperados." if es
-                                     else "Details not retrieved."))
+                lines.append(
+                    "  - "
+                    + ("Detalles no recuperados." if es else "Details not retrieved.")
+                )
         if not source_by_person[fid]:
-            lines.append("- " + ("No hay fuentes recuperadas." if es
-                                 else "No cached sources."))
+            lines.append(
+                "- " + ("No hay fuentes recuperadas." if es else "No cached sources.")
+            )
 
         lines.extend(["", "#### " + ("Notas" if es else "Notes"), ""])
         for note in note_by_person[fid]:
             lines.append(
-                "- **" + _md(note["subject"] or ("Nota" if es else "Note"))
-                + "**: " + _md(note["text"])
+                "- **"
+                + _md(note["subject"] or ("Nota" if es else "Note"))
+                + "**: "
+                + _md(note["text"])
             )
         if not note_by_person[fid]:
-            lines.append("- " + ("No hay notas recuperadas." if es
-                                 else "No cached notes."))
+            lines.append(
+                "- " + ("No hay notas recuperadas." if es else "No cached notes.")
+            )
 
         lines.extend(["", "#### " + ("Recuerdos" if es else "Memories"), ""])
         for memory in memory_by_person[fid]:
@@ -349,19 +415,29 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
             if memory["description"]:
                 lines.append("  - " + _md(memory["description"]))
             if memory["details_available"] is False:
-                lines.append("  - " + ("Detalles no recuperados." if es
-                                     else "Details not retrieved."))
+                lines.append(
+                    "  - "
+                    + ("Detalles no recuperados." if es else "Details not retrieved.")
+                )
         if not memory_by_person[fid]:
-            lines.append("- " + ("No hay recuerdos recuperados." if es
-                                 else "No cached memories."))
+            lines.append(
+                "- "
+                + ("No hay recuerdos recuperados." if es else "No cached memories.")
+            )
 
-        lines.extend([
-            "", "#### " + ("Mi revisión" if es else "My review"), "",
-            f"<!-- review:start {fid} -->",
-            _event_checklist(events_here, saved.get(fid, ""), language),
-            f"<!-- review:end {fid} -->",
-            "", "---", "",
-        ])
+        lines.extend(
+            [
+                "",
+                "#### " + ("Mi revisión" if es else "My review"),
+                "",
+                f"<!-- review:start {fid} -->",
+                _event_checklist(events_here, saved.get(fid, ""), language),
+                f"<!-- review:end {fid} -->",
+                "",
+                "---",
+                "",
+            ]
+        )
 
     temporary = report.with_name(report.name + ".tmp")
     temporary.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -369,7 +445,15 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
     temporary.replace(report)
     return {
         "path": report,
-        **{key: len(data[key]) for key in (
-            "people", "events", "relationships", "sources", "notes", "memories"
-        )},
+        **{
+            key: len(data[key])
+            for key in (
+                "people",
+                "events",
+                "relationships",
+                "sources",
+                "notes",
+                "memories",
+            )
+        },
     }

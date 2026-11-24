@@ -1,4 +1,3 @@
-
 """Tests for manual genealogy research organization"""
 
 import tempfile
@@ -34,9 +33,7 @@ class ResearchPlannerFeatureTests(unittest.TestCase):
                         {
                             "id": fid,
                             "display": {"name": fid},
-                            "gender": {
-                                "type": f"http://gedcomx.org/{gender}"
-                            },
+                            "gender": {"type": f"http://gedcomx.org/{gender}"},
                         }
                     ]
                 },
@@ -64,10 +61,7 @@ class ResearchPlannerFeatureTests(unittest.TestCase):
         self.temp.cleanup()
 
     def by_id(self):
-        return {
-            item["id"]: item
-            for item in self.plan.items()
-        }
+        return {item["id"]: item for item in self.plan.items()}
 
     def test_category_override_survives_reopening(self):
         self.plan.set_category("FATH-111", "collateral")

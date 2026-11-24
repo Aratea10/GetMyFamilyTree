@@ -1,4 +1,3 @@
-
 """Regression tests for complex genealogy graphs"""
 
 import tempfile
@@ -33,9 +32,7 @@ class ResearchGraphTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
 
-        self.store = Checkpoint(
-            Path(self.temp.name) / "tree.sqlite"
-        )
+        self.store = Checkpoint(Path(self.temp.name) / "tree.sqlite")
         self.addCleanup(self.store.close)
 
         self.store.set_origin("SELF-111")
@@ -56,9 +53,7 @@ class ResearchGraphTests(unittest.TestCase):
                         {
                             "id": fid,
                             "display": {"name": fid},
-                            "gender": {
-                                "type": f"http://gedcomx.org/{gender}"
-                            },
+                            "gender": {"type": f"http://gedcomx.org/{gender}"},
                         }
                     ]
                 },
@@ -86,23 +81,13 @@ class ResearchGraphTests(unittest.TestCase):
             },
         )
 
-        result = build_recommendations(
-            self.store, identifiers
-        )
+        result = build_recommendations(self.store, identifiers)
 
         self.assertEqual(set(result), set(identifiers))
-        self.assertEqual(
-            result["SELF-111"]["category"], "origin"
-        )
-        self.assertEqual(
-            result["SELF-111"]["generation"], 0
-        )
-        self.assertEqual(
-            result["AAAA-111"]["generation"], 1
-        )
-        self.assertEqual(
-            result["BBBB-111"]["generation"], 2
-        )
+        self.assertEqual(result["SELF-111"]["category"], "origin")
+        self.assertEqual(result["SELF-111"]["generation"], 0)
+        self.assertEqual(result["AAAA-111"]["generation"], 1)
+        self.assertEqual(result["BBBB-111"]["generation"], 2)
 
     def test_shared_in_law_preserves_all_affinity_links(self):
         identifiers = [
@@ -121,9 +106,7 @@ class ResearchGraphTests(unittest.TestCase):
             FAMILIES_URL.format("SELF-111"),
             {
                 "childAndParentsRelationships": [
-                    parent_child(
-                        "SELF-111", "FATH-111", "MOTH-111"
-                    ),
+                    parent_child("SELF-111", "FATH-111", "MOTH-111"),
                     parent_child("MOTH-111", "MGRM-111"),
                     parent_child("MAUN-111", "MGRM-111"),
                     parent_child("SPSE-111", "INLW-111"),
@@ -135,9 +118,7 @@ class ResearchGraphTests(unittest.TestCase):
             },
         )
 
-        result = build_recommendations(
-            self.store, identifiers
-        )
+        result = build_recommendations(self.store, identifiers)
 
         relative = result["INLW-111"]
 
@@ -162,9 +143,7 @@ class ResearchGraphTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(
-            relative["recommendation_key"][2], 3
-        )
+        self.assertEqual(relative["recommendation_key"][2], 3)
 
     def test_blood_relative_partner_can_have_external_relatives(self):
         identifiers = [
@@ -185,9 +164,7 @@ class ResearchGraphTests(unittest.TestCase):
                     parent_child("SELF-111", "FATH-111"),
                     parent_child("FATH-111", "GRPA-111"),
                     parent_child("AUNT-111", "GRPA-111"),
-                    parent_child(
-                        "COUS-111", "AUNT-111", "OUTS-111"
-                    ),
+                    parent_child("COUS-111", "AUNT-111", "OUTS-111"),
                 ],
                 "relationships": [
                     couple("SELF-111", "COUS-111"),
@@ -195,16 +172,10 @@ class ResearchGraphTests(unittest.TestCase):
             },
         )
 
-        result = build_recommendations(
-            self.store, identifiers
-        )
+        result = build_recommendations(self.store, identifiers)
 
-        self.assertEqual(
-            result["COUS-111"]["category"], "collateral"
-        )
-        self.assertEqual(
-            result["OUTS-111"]["category"], "in_law"
-        )
+        self.assertEqual(result["COUS-111"]["category"], "collateral")
+        self.assertEqual(result["OUTS-111"]["category"], "in_law")
         self.assertEqual(
             result["OUTS-111"]["affinity_links"],
             [

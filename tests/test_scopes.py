@@ -1,4 +1,5 @@
 """Regression tests for directional, generation-limited FamilySearch downloads."""
+
 from __future__ import annotations
 
 import io
@@ -6,7 +7,6 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
-from unittest.mock import patch
 
 from getmyfamilytree.cli import Checkpoint, assemble, main
 from getmyfamilytree.reports import collect_reports
@@ -78,12 +78,14 @@ class FamilyGraphSession:
             if identifier not in self.relationships:
                 return None
             return {
-                "persons": [{
-                    "id": identifier,
-                    "display": {"name": "Person " + identifier},
-                    "names": [],
-                    "living": False,
-                }],
+                "persons": [
+                    {
+                        "id": identifier,
+                        "display": {"name": "Person " + identifier},
+                        "names": [],
+                        "living": False,
+                    }
+                ],
                 "relationships": self.relationships[identifier],
             }
         if url.endswith("/families"):
@@ -102,14 +104,19 @@ class ScopeTests(unittest.TestCase):
         self.checkpoint.close()
         self.tmp.cleanup()
 
-    def run_scope(self, mode, *, generations=None, distance=None,
-                  max_people=0, offline=False):
+    def run_scope(
+        self, mode, *, generations=None, distance=None, max_people=0, offline=False
+    ):
         with redirect_stderr(io.StringIO()):
             return crawl_scope(
-                self.checkpoint, None if offline else self.session,
-                FamilyGraphSession.ROOT, scope=mode,
-                generations=generations, distance=distance,
-                max_people=max_people, progress=0,
+                self.checkpoint,
+                None if offline else self.session,
+                FamilyGraphSession.ROOT,
+                scope=mode,
+                generations=generations,
+                distance=distance,
+                max_people=max_people,
+                progress=0,
             )
 
     def test_child_and_parents_relationships_are_directional(self):
@@ -120,23 +127,28 @@ class ScopeTests(unittest.TestCase):
                 person_id = url.split("pids=", 1)[-1]
                 relations = []
                 if person_id == "AAAA-111":
-                    relations = [{
-                        "id": "parents-1",
-                        "child": {"resourceId": "AAAA-111"},
-                        "parent1": {"resourceId": "BBBB-222"},
-                        "parent2": {"resourceId": "CCCC-333"},
-                    }]
+                    relations = [
+                        {
+                            "id": "parents-1",
+                            "child": {"resourceId": "AAAA-111"},
+                            "parent1": {"resourceId": "BBBB-222"},
+                            "parent2": {"resourceId": "CCCC-333"},
+                        }
+                    ]
                 return {
                     "persons": [{"id": person_id, "living": False, "names": []}],
                     "childAndParentsRelationships": relations,
                 }
+
         result = crawl_scope(
-            self.checkpoint, FamilyOnly(), "AAAA-111",
-            scope="ancestors", generations=1, progress=0,
+            self.checkpoint,
+            FamilyOnly(),
+            "AAAA-111",
+            scope="ancestors",
+            generations=1,
+            progress=0,
         )
-        self.assertEqual(
-            set(result.ids), {"AAAA-111", "BBBB-222", "CCCC-333"}
-        )
+        self.assertEqual(set(result.ids), {"AAAA-111", "BBBB-222", "CCCC-333"})
 
     def test_ancestors_have_only_paternal_and_maternal_lines(self):
         ids = set(self.run_scope("ancestors", generations=1).ids)
@@ -160,7 +172,8 @@ class ScopeTests(unittest.TestCase):
     def test_extended_family_uses_relationship_distance(self):
         one = set(self.run_scope("family", distance=1).ids)
         self.assertEqual(
-            one, {"AAAA-111", "BBBB-222", "CCCC-333", "EEEE-555", "FFFF-666"},
+            one,
+            {"AAAA-111", "BBBB-222", "CCCC-333", "EEEE-555", "FFFF-666"},
         )
         two = set(self.run_scope("family", distance=2).ids)
         self.assertEqual(two, set(self.session.relationships))
@@ -179,9 +192,14 @@ class ScopeTests(unittest.TestCase):
         root_url = "/platform/tree/persons?pids=AAAA-111"
         calls_before = self.session.calls.count(root_url)
         descendants = self.run_scope("descendants", generations=2)
-        self.assertEqual(set(descendants.ids), {
-            "AAAA-111", "FFFF-666", "HHHH-888",
-        })
+        self.assertEqual(
+            set(descendants.ids),
+            {
+                "AAAA-111",
+                "FFFF-666",
+                "HHHH-888",
+            },
+        )
         self.assertEqual(self.session.calls.count(root_url), calls_before)
         self.assertGreaterEqual(descendants.reused, 1)
         full = self.run_scope("full")
@@ -194,9 +212,15 @@ class ScopeTests(unittest.TestCase):
         self.assertEqual(first.ids, ["AAAA-111", "BBBB-222"])
         self.assertFalse(first.exhausted)
         later = self.run_scope("ancestors", generations=2, max_people=4)
-        self.assertEqual(set(later.ids), {
-            "AAAA-111", "BBBB-222", "CCCC-333", "KKKK-999",
-        })
+        self.assertEqual(
+            set(later.ids),
+            {
+                "AAAA-111",
+                "BBBB-222",
+                "CCCC-333",
+                "KKKK-999",
+            },
+        )
         self.assertTrue(later.exhausted)
         root = "/platform/tree/persons?pids=AAAA-111"
         self.assertEqual(self.session.calls.count(root), 1)
@@ -204,13 +228,20 @@ class ScopeTests(unittest.TestCase):
     def test_gedcom_export_includes_only_selected_ancestors(self):
         self.run_scope("full")
         selected = self.run_scope(
-            "ancestors", generations=1, offline=True,
+            "ancestors",
+            generations=1,
+            offline=True,
         ).ids
         output = Path(self.tmp.name) / "ancestors.ged"
         people, _ = assemble(
-            self.checkpoint, self.session, output,
-            no_sources=True, no_notes=True, no_memories=True,
-            no_contributors=True, selected_ids=selected,
+            self.checkpoint,
+            self.session,
+            output,
+            no_sources=True,
+            no_notes=True,
+            no_memories=True,
+            no_contributors=True,
+            selected_ids=selected,
         )
         gedcom = output.read_text(encoding="utf-8")
         self.assertEqual(people, 3)
@@ -233,7 +264,8 @@ class ScopeTests(unittest.TestCase):
             "EEEE-555", {person["person_id"] for person in report["people"]}
         )
         couple_links = [
-            relation for relation in report["relationships"]
+            relation
+            for relation in report["relationships"]
             if relation["relationship_type"] == "Couple"
         ]
         self.assertFalse(couple_links)
@@ -242,14 +274,20 @@ class ScopeTests(unittest.TestCase):
         self.run_scope("full")
         original_calls = list(self.session.calls)
         result = self.run_scope("descendants", generations=2, offline=True)
-        self.assertEqual(set(result.ids), {
-            "AAAA-111", "FFFF-666", "HHHH-888",
-        })
+        self.assertEqual(
+            set(result.ids),
+            {
+                "AAAA-111",
+                "FFFF-666",
+                "HHHH-888",
+            },
+        )
         self.assertEqual(self.session.calls, original_calls)
 
     def test_spanish_help_lists_four_modes(self):
         output = io.StringIO()
         from contextlib import redirect_stdout
+
         with redirect_stdout(output), self.assertRaises(SystemExit):
             main(["--language", "es", "--help"])
         self.assertIn("--scope", output.getvalue())
@@ -266,7 +304,10 @@ class ScopeTests(unittest.TestCase):
         ]
         for options in variants:
             with self.subTest(options=options):
-                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exc:
+                with (
+                    redirect_stderr(io.StringIO()),
+                    self.assertRaises(SystemExit) as exc,
+                ):
                     main(options)
                 self.assertEqual(exc.exception.code, 2)
 

@@ -1,4 +1,3 @@
-
 """Tests for efficient bulk loading of cached genealogy records"""
 
 import tempfile
@@ -13,9 +12,7 @@ from getmyfamilytree.research_recommendations import build_recommendations
 class ResearchBulkCacheTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.store = Checkpoint(
-            Path(self.temp.name) / "bulk.sqlite"
-        )
+        self.store = Checkpoint(Path(self.temp.name) / "bulk.sqlite")
 
     def tearDown(self):
         self.store.close()
@@ -29,11 +26,13 @@ class ResearchBulkCacheTests(unittest.TestCase):
             {"persons": [{"id": "AAAA-111"}]},
         )
 
-        result = self.store.get_responses([
-            key,
-            key,
-            PERSON_URL + "BBBB-222",
-        ])
+        result = self.store.get_responses(
+            [
+                key,
+                key,
+                PERSON_URL + "BBBB-222",
+            ]
+        )
 
         self.assertEqual(len(result), 1)
         self.assertEqual(
@@ -43,10 +42,7 @@ class ResearchBulkCacheTests(unittest.TestCase):
         self.assertEqual(self.store.get_responses([]), {})
 
     def test_large_recommendations_use_batched_reads(self):
-        identifiers = [
-            f"P{index:03d}-{index:03d}"
-            for index in range(620)
-        ]
+        identifiers = [f"P{index:03d}-{index:03d}" for index in range(620)]
 
         self.store.set_origin(identifiers[0])
         self.store.seed(identifiers)
@@ -55,10 +51,12 @@ class ResearchBulkCacheTests(unittest.TestCase):
             self.store.save_response(
                 PERSON_URL + fid,
                 {
-                    "persons": [{
-                        "id": fid,
-                        "display": {"name": fid},
-                    }]
+                    "persons": [
+                        {
+                            "id": fid,
+                            "display": {"name": fid},
+                        }
+                    ]
                 },
             )
             self.store.finish(fid, [])
@@ -68,10 +66,7 @@ class ResearchBulkCacheTests(unittest.TestCase):
         def trace(statement):
             sql = statement.strip().upper()
 
-            if (
-                sql.startswith("SELECT")
-                and "FROM RESPONSES" in sql
-            ):
+            if sql.startswith("SELECT") and "FROM RESPONSES" in sql:
                 queries.append(statement)
 
         self.store.connection.set_trace_callback(trace)

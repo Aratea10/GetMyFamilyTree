@@ -1,4 +1,3 @@
-
 """Tests for the offline research CLI"""
 
 import io
@@ -32,13 +31,13 @@ class ResearchCliTests(unittest.TestCase):
             store.save_response(
                 PERSON_URL + fid,
                 {
-                    "persons": [{
-                        "id": fid,
-                        "display": {"name": fid},
-                        "gender": {
-                            "type": f"http://gedcomx.org/{gender}"
-                        },
-                    }]
+                    "persons": [
+                        {
+                            "id": fid,
+                            "display": {"name": fid},
+                            "gender": {"type": f"http://gedcomx.org/{gender}"},
+                        }
+                    ]
                 },
             )
             store.finish(fid, [])
@@ -46,11 +45,13 @@ class ResearchCliTests(unittest.TestCase):
         store.save_response(
             FAMILIES_URL.format("SELF-111"),
             {
-                "childAndParentsRelationships": [{
-                    "child": {"resourceId": "SELF-111"},
-                    "parent1": {"resourceId": "FATH-111"},
-                    "parent2": {"resourceId": "MOTH-111"},
-                }]
+                "childAndParentsRelationships": [
+                    {
+                        "child": {"resourceId": "SELF-111"},
+                        "parent1": {"resourceId": "FATH-111"},
+                        "parent2": {"resourceId": "MOTH-111"},
+                    }
+                ]
             },
         )
 
@@ -63,14 +64,16 @@ class ResearchCliTests(unittest.TestCase):
         output = io.StringIO()
 
         with redirect_stdout(output):
-            main([
-                "research",
-                "--database",
-                str(self.path),
-                "--language",
-                "es",
-                *arguments,
-            ])
+            main(
+                [
+                    "research",
+                    "--database",
+                    str(self.path),
+                    "--language",
+                    "es",
+                    *arguments,
+                ]
+            )
 
         return output.getvalue()
 
@@ -93,9 +96,7 @@ class ResearchCliTests(unittest.TestCase):
     def test_summary_counts_research_statuses(self):
         self.invoke("status", "FATH-111", "done")
 
-        result = json.loads(
-            self.invoke("summary", "--json")
-        )
+        result = json.loads(self.invoke("summary", "--json"))
 
         self.assertEqual(result["people"], 3)
         self.assertEqual(result["statuses"]["done"], 1)
@@ -126,10 +127,7 @@ class ResearchCliTests(unittest.TestCase):
             "MOTH-111",
         )
 
-        father = next(
-            item for item in result["items"]
-            if item["id"] == "FATH-111"
-        )
+        father = next(item for item in result["items"] if item["id"] == "FATH-111")
 
         self.assertEqual(father["priority"], 0)
         self.assertEqual(father["category"], "collateral")
@@ -142,14 +140,9 @@ class ResearchCliTests(unittest.TestCase):
         self.invoke("category", "FATH-111", "auto")
         self.invoke("branches", "FATH-111", "auto")
 
-        restored = json.loads(
-            self.invoke("list", "--json")
-        )
+        restored = json.loads(self.invoke("list", "--json"))
 
-        father = next(
-            item for item in restored["items"]
-            if item["id"] == "FATH-111"
-        )
+        father = next(item for item in restored["items"] if item["id"] == "FATH-111")
 
         self.assertEqual(father["category"], "ancestor")
         self.assertFalse(father["category_is_manual"])
@@ -159,12 +152,14 @@ class ResearchCliTests(unittest.TestCase):
         missing = Path(self.temp.name) / "missing.sqlite"
 
         with self.assertRaises(SystemExit) as caught:
-            main([
-                "research",
-                "--database",
-                str(missing),
-                "list",
-            ])
+            main(
+                [
+                    "research",
+                    "--database",
+                    str(missing),
+                    "list",
+                ]
+            )
 
         self.assertEqual(caught.exception.code, 2)
         self.assertFalse(missing.exists())

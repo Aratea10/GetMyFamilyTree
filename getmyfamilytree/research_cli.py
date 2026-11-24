@@ -1,16 +1,15 @@
-
 """Offline command-line interface for the research planner"""
 
 import argparse
-from collections import Counter
 import json
+from collections import Counter
 from pathlib import Path
 
 from getmyfamilytree.i18n import resolve_language
 from getmyfamilytree.research_plan import (
-    ResearchPlan,
     VALID_CATEGORIES,
     VALID_STATUSES,
+    ResearchPlan,
 )
 
 
@@ -91,7 +90,7 @@ def build_parser():
     category.add_argument("fid")
     category.add_argument(
         "value",
-        choices=sorted(VALID_CATEGORIES) + ["auto"],
+        choices=[*sorted(VALID_CATEGORIES), "auto"],
     )
 
     branches = commands.add_parser(
@@ -117,23 +116,16 @@ def build_parser():
 
 def filter_items(items, args):
     if args.status:
-        items = [
-            item for item in items
-            if item["status"] == args.status
-        ]
+        items = [item for item in items if item["status"] == args.status]
 
     if args.category:
-        items = [
-            item for item in items
-            if item["category"] == args.category
-        ]
+        items = [item for item in items if item["category"] == args.category]
 
     if args.branch:
         items = [
-            item for item in items
-            if args.branch in {
-                branch["id"] for branch in item["branches"]
-            }
+            item
+            for item in items
+            if args.branch in {branch["id"] for branch in item["branches"]}
         ]
 
     return items
@@ -148,83 +140,79 @@ def print_listing(plan, args, language):
     total = len(items)
 
     if args.limit == 0:
-        page = items[args.offset:]
+        page = items[args.offset :]
     else:
-        page = items[
-            args.offset:args.offset + args.limit
-        ]
+        page = items[args.offset : args.offset + args.limit]
 
     if args.json:
-        print(json.dumps(
-            {
-                "total": total,
-                "offset": args.offset,
-                "count": len(page),
-                "items": page,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ))
+        print(
+            json.dumps(
+                {
+                    "total": total,
+                    "offset": args.offset,
+                    "count": len(page),
+                    "items": page,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return
 
-    print(message(
-        language,
-        f"Mostrando {len(page)} de {total} personas",
-        f"Showing {len(page)} of {total} people",
-    ))
+    print(
+        message(
+            language,
+            f"Mostrando {len(page)} de {total} personas",
+            f"Showing {len(page)} of {total} people",
+        )
+    )
 
     print("ID\tName\tStatus\tPriority\tCategory\tBranches")
 
     for item in page:
-        branch_ids = ",".join(
-            branch["id"] for branch in item["branches"]
-        )
+        branch_ids = ",".join(branch["id"] for branch in item["branches"])
 
         print(
-            f'{item["id"]}\t'
-            f'{item["name"]}\t'
-            f'{item["status"]}\t'
-            f'{item["priority"]}\t'
-            f'{item["category"]}\t'
-            f'{branch_ids}'
+            f"{item['id']}\t"
+            f"{item['name']}\t"
+            f"{item['status']}\t"
+            f"{item['priority']}\t"
+            f"{item['category']}\t"
+            f"{branch_ids}"
         )
 
 
 def print_summary(plan, args, language):
     items = plan.items()
 
-    statuses = Counter(
-        item["status"] for item in items
-    )
-    categories = Counter(
-        item["category"] for item in items
-    )
+    statuses = Counter(item["status"] for item in items)
+    categories = Counter(item["category"] for item in items)
 
     result = {
         "people": len(items),
-        "statuses": {
-            status: statuses[status]
-            for status in sorted(VALID_STATUSES)
-        },
+        "statuses": {status: statuses[status] for status in sorted(VALID_STATUSES)},
         "categories": {
-            category: categories[category]
-            for category in sorted(VALID_CATEGORIES)
+            category: categories[category] for category in sorted(VALID_CATEGORIES)
         },
     }
 
     if args.json:
-        print(json.dumps(
-            result,
-            ensure_ascii=False,
-            indent=2,
-        ))
+        print(
+            json.dumps(
+                result,
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return
 
-    print(message(
-        language,
-        f'Personas: {result["people"]}',
-        f'People: {result["people"]}',
-    ))
+    print(
+        message(
+            language,
+            f"Personas: {result['people']}",
+            f"People: {result['people']}",
+        )
+    )
 
     print("\nStatus:")
     for key, value in result["statuses"].items():
@@ -248,27 +236,28 @@ def run(argv, checkpoint_factory):
     database = args.database.expanduser()
 
     if not database.is_file():
-        parser.error(message(
-            language,
-            f"No existe la base de datos: {database}",
-            f"Database does not exist: {database}",
-        ))
-
-    if args.action == "list":
-        if args.limit < 0 or args.offset < 0:
-            parser.error(
-                "--limit and --offset must be non-negative"
+        parser.error(
+            message(
+                language,
+                f"No existe la base de datos: {database}",
+                f"Database does not exist: {database}",
             )
+        )
+
+    if args.action == "list" and (args.limit < 0 or args.offset < 0):
+        parser.error("--limit and --offset must be non-negative")
 
     checkpoint = checkpoint_factory(database)
 
     try:
         if not checkpoint.get_origin():
-            parser.error(message(
-                language,
-                "La base de datos no tiene una persona inicial.",
-                "The database has no starting person.",
-            ))
+            parser.error(
+                message(
+                    language,
+                    "La base de datos no tiene una persona inicial.",
+                    "The database has no starting person.",
+                )
+            )
 
         plan = ResearchPlan(checkpoint)
         plan.sync()
@@ -294,9 +283,7 @@ def run(argv, checkpoint_factory):
                 if args.values == ["auto"]:
                     plan.set_branches(args.fid, None)
                 elif "auto" in args.values:
-                    raise ValueError(
-                        "'auto' cannot be combined with branch IDs"
-                    )
+                    raise ValueError("'auto' cannot be combined with branch IDs")
                 else:
                     plan.set_branches(args.fid, args.values)
 
@@ -304,18 +291,16 @@ def run(argv, checkpoint_factory):
                 plan.move(args.fid, before_id=args.before)
 
             if args.action not in ("list", "summary"):
-                print(message(
-                    language,
-                    f"Actualizado: {args.fid}",
-                    f"Updated: {args.fid}",
-                ))
+                print(
+                    message(
+                        language,
+                        f"Actualizado: {args.fid}",
+                        f"Updated: {args.fid}",
+                    )
+                )
 
         except (ValueError, KeyError) as error:
-            detail = (
-                error.args[0]
-                if isinstance(error, KeyError)
-                else str(error)
-            )
+            detail = error.args[0] if isinstance(error, KeyError) else str(error)
             parser.error(str(detail))
 
     finally:

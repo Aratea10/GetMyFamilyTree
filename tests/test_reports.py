@@ -1,12 +1,13 @@
-"""Tests for chronological, editable genealogy review tables."""
+"""Tests for chronological, editable genealogy review tables"""
+
 from __future__ import annotations
 
 import csv
 import io
-from contextlib import redirect_stdout
-from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
 
 from getmyfamilytree.cli import Checkpoint, main
 from getmyfamilytree.reports import export_reports, year_for_sorting
@@ -75,12 +76,14 @@ class ReviewExportTests(unittest.TestCase):
         self.checkpoint.save_response(
             "/platform/tree/persons/AAAA-111/families",
             {
-                "relationships": [{
-                    "id": "couple1",
-                    "type": "http://gedcomx.org/Couple",
-                    "person1": {"resourceId": "AAAA-111"},
-                    "person2": {"resourceId": "BBBB-222"},
-                }],
+                "relationships": [
+                    {
+                        "id": "couple1",
+                        "type": "http://gedcomx.org/Couple",
+                        "person1": {"resourceId": "AAAA-111"},
+                        "person2": {"resourceId": "BBBB-222"},
+                    }
+                ],
             },
         )
         self.checkpoint.finish("AAAA-111", [])
@@ -101,35 +104,55 @@ class ReviewExportTests(unittest.TestCase):
         self.checkpoint.save_response(
             "0::/platform/tree/persons/AAAA-111/sources",
             {
-                "persons": [{"sources": [{
-                    "descriptionId": "S1",
-                    "attribution": {"changeMessage": "Checked in archive"},
-                }]}],
-                "sourceDescriptions": [{
-                    "id": "S1",
-                    "titles": [{"value": "Libro de bautismos"}],
-                    "citations": [{"value": "Parroquia de Darbo, folio 12"}],
-                    "about": "https://www.familysearch.org/ark:/61903/1:1:ABCDE",
-                    "notes": [{"id": "source-note-1", "text": "Original scan"}],
-                }],
+                "persons": [
+                    {
+                        "sources": [
+                            {
+                                "descriptionId": "S1",
+                                "attribution": {"changeMessage": "Checked in archive"},
+                            }
+                        ]
+                    }
+                ],
+                "sourceDescriptions": [
+                    {
+                        "id": "S1",
+                        "titles": [{"value": "Libro de bautismos"}],
+                        "citations": [{"value": "Parroquia de Darbo, folio 12"}],
+                        "about": "https://www.familysearch.org/ark:/61903/1:1:ABCDE",
+                        "notes": [{"id": "source-note-1", "text": "Original scan"}],
+                    }
+                ],
             },
         )
         self.checkpoint.save_response(
             "0::/platform/tree/persons/AAAA-111/notes",
-            {"persons": [{"notes": [{
-                "id": "person-note-1",
-                "subject": "Research",
-                "text": "Compare with parish register",
-            }]}]},
+            {
+                "persons": [
+                    {
+                        "notes": [
+                            {
+                                "id": "person-note-1",
+                                "subject": "Research",
+                                "text": "Compare with parish register",
+                            }
+                        ]
+                    }
+                ]
+            },
         )
         self.checkpoint.save_response(
             "0::/platform/memories/memories/M1234",
-            {"sourceDescriptions": [{
-                "id": "mem-1",
-                "mediaType": "image/jpeg",
-                "titles": [{"value": "Old family photograph"}],
-                "about": "https://www.familysearch.org/photos/artifacts/123",
-            }]},
+            {
+                "sourceDescriptions": [
+                    {
+                        "id": "mem-1",
+                        "mediaType": "image/jpeg",
+                        "titles": [{"value": "Old family photograph"}],
+                        "about": "https://www.familysearch.org/photos/artifacts/123",
+                    }
+                ]
+            },
         )
         result = export_reports(self.checkpoint, self.output)
         sources = read_table(result["paths"]["sources"])
@@ -170,25 +193,41 @@ class ReviewExportTests(unittest.TestCase):
     def test_relationship_source_and_note_are_kept(self):
         self.checkpoint.save_response(
             "0::/platform/tree/couple-relationships/couple1",
-            {"relationships": [{
-                "id": "couple1",
-                "sources": [{"descriptionId": "marriage-source"}],
-            }]},
+            {
+                "relationships": [
+                    {
+                        "id": "couple1",
+                        "sources": [{"descriptionId": "marriage-source"}],
+                    }
+                ]
+            },
         )
         self.checkpoint.save_response(
             "0::/platform/tree/couple-relationships/couple1/sources",
-            {"sourceDescriptions": [{
-                "id": "marriage-source",
-                "titles": [{"value": "Marriage register"}],
-                "citations": [{"value": "Parish book 1903"}],
-            }]},
+            {
+                "sourceDescriptions": [
+                    {
+                        "id": "marriage-source",
+                        "titles": [{"value": "Marriage register"}],
+                        "citations": [{"value": "Parish book 1903"}],
+                    }
+                ]
+            },
         )
         self.checkpoint.save_response(
             "0::/platform/tree/couple-relationships/couple1/notes",
-            {"relationships": [{"notes": [{
-                "id": "marriage-note",
-                "text": "Verify witness names",
-            }]}]},
+            {
+                "relationships": [
+                    {
+                        "notes": [
+                            {
+                                "id": "marriage-note",
+                                "text": "Verify witness names",
+                            }
+                        ]
+                    }
+                ]
+            },
         )
         report = export_reports(self.checkpoint, self.output)
         sources = read_table(report["paths"]["sources"])
@@ -207,10 +246,14 @@ class ReviewExportTests(unittest.TestCase):
         )
         self.checkpoint.save_response(
             "0::/platform/tree/persons/AAAA-111/sources",
-            {"sourceDescriptions": [{
-                "id": "S2",
-                "titles": [{"value": "=HYPERLINK(\"https://example.org\")"}],
-            }]},
+            {
+                "sourceDescriptions": [
+                    {
+                        "id": "S2",
+                        "titles": [{"value": '=HYPERLINK("https://example.org")'}],
+                    }
+                ]
+            },
         )
         report = export_reports(self.checkpoint, self.output)
         sources = read_table(report["paths"]["sources"])
@@ -253,11 +296,13 @@ class ReviewExportTests(unittest.TestCase):
         rows[0]["notes"] = "Checked the original register"
         write_table(review_path, ["event_key", "verified", "notes"], rows)
 
-        self.person["facts"].append({
-            "id": "newfact",
-            "type": "http://gedcomx.org/Death",
-            "date": {"original": "1912"},
-        })
+        self.person["facts"].append(
+            {
+                "id": "newfact",
+                "type": "http://gedcomx.org/Death",
+                "date": {"original": "1912"},
+            }
+        )
         self.checkpoint.save_response(
             "/platform/tree/persons?pids=AAAA-111",
             {"persons": [self.person]},
@@ -279,15 +324,12 @@ class ReviewExportTests(unittest.TestCase):
 
     def test_does_not_modify_gedcom_or_checkpoint_records(self):
         self.output.write_text("original GEDCOM", encoding="utf-8")
-        before = self.checkpoint.get_response(
-            "/platform/tree/persons?pids=AAAA-111"
-        )
+        before = self.checkpoint.get_response("/platform/tree/persons?pids=AAAA-111")
         export_reports(self.checkpoint, self.output)
         self.assertEqual(self.output.read_text(), "original GEDCOM")
         self.assertEqual(
-            before, self.checkpoint.get_response(
-                "/platform/tree/persons?pids=AAAA-111"
-            ),
+            before,
+            self.checkpoint.get_response("/platform/tree/persons?pids=AAAA-111"),
         )
 
     def test_report_only_works_without_login(self):

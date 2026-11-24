@@ -7,52 +7,47 @@ people already fetched. It deliberately imposes no *generation* boundaries.
 from __future__ import annotations
 
 import argparse
+import getpass
+import json
+import os
+import re
+import sqlite3
+import sys
 from concurrent.futures import (
     ThreadPoolExecutor,
     as_completed,
 )
-import getpass
-import json
-import os
 from pathlib import Path
-import re
-import sqlite3
-import sys
 from threading import RLock
 
 from getmyancestors.classes.session import (
     Session,
 )
-from getmyfamilytree.gedcom_tree import (
-    ExportTree,
-)
+
 from getmyfamilytree.credentials import (
     CredentialStore,
     CredentialStoreError,
+)
+from getmyfamilytree.gedcom_tree import (
+    ExportTree,
 )
 from getmyfamilytree.i18n import (
     resolve_language,
     translate,
 )
-from getmyfamilytree.reports import (
-    export_reports,
-)
 from getmyfamilytree.person_report import (
     write_person_report,
+)
+from getmyfamilytree.reports import (
+    export_reports,
 )
 from getmyfamilytree.scopes import (
     crawl_scope,
 )
 
-PERSON_URL = (
-    "/platform/tree/persons?pids="
-)
-FAMILIES_URL = (
-    "/platform/tree/persons/{}/families"
-)
-PERSON_ID = re.compile(
-    r"[A-Z0-9]{4}-[A-Z0-9]{3}\Z"
-)
+PERSON_URL = "/platform/tree/persons?pids="
+FAMILIES_URL = "/platform/tree/persons/{}/families"
+PERSON_ID = re.compile(r"[A-Z0-9]{4}-[A-Z0-9]{3}\Z")
 RELATIONSHIP_FIELDS = (
     "childAndParentsRelationships",
     "relationships",
@@ -68,110 +63,58 @@ MEMBER_FIELDS = (
 
 def _member_id(relationship, name):
     member = relationship.get(name)
-    return (
-        member.get("resourceId")
-        if isinstance(member, dict)
-        else None
-    )
+    return member.get("resourceId") if isinstance(member, dict) else None
 
 
 def related_people(document):
-    """Find endpoints in *all* parent/child and couple relationships."""
+    """Find endpoints in *all* parent/child and couple relationships"""
     found = set()
     for kind in RELATIONSHIP_FIELDS:
-        for (
-            relationship
-        ) in document.get(kind, []):
+        for relationship in document.get(kind, []):
             for field in MEMBER_FIELDS:
-                member = (
-                    relationship.get(
-                        field
-                    )
-                )
-                if isinstance(
-                    member, dict
-                ):
-                    identifier = (
-                        member.get(
-                            "resourceId"
-                        )
-                    )
-                    if (
-                        identifier
-                        and PERSON_ID.fullmatch(
-                            identifier
-                        )
-                    ):
-                        found.add(
-                            identifier
-                        )
-    for person in document.get(
-        "persons", []
-    ):
+                member = relationship.get(field)
+                if isinstance(member, dict):
+                    identifier = member.get("resourceId")
+                    if identifier and PERSON_ID.fullmatch(identifier):
+                        found.add(identifier)
+    for person in document.get("persons", []):
         identifier = person.get("id")
-        if (
-            identifier
-            and PERSON_ID.fullmatch(
-                identifier
-            )
-        ):
+        if identifier and PERSON_ID.fullmatch(identifier):
             found.add(identifier)
     return found
 
 
 def person_display_name(document, fid):
-    """Use the FamilySearch display name, falling back to the person ID."""
-    for person in document.get(
-        "persons", []
-    ):
+    """Use the FamilySearch display name, falling back to the person ID"""
+    for person in document.get("persons", []):
         if person.get("id") != fid:
             continue
-        name = (
-            person.get("display") or {}
-        ).get("name")
+        name = (person.get("display") or {}).get("name")
         if not name:
             forms = [
                 form
-                for entry in person.get(
-                    "names", []
-                )
-                for form in entry.get(
-                    "nameForms", []
-                )
+                for entry in person.get("names", [])
+                for form in entry.get("nameForms", [])
             ]
             name = next(
-                (
-                    form.get("fullText")
-                    for form in forms
-                    if form.get(
-                        "fullText"
-                    )
-                ),
+                (form.get("fullText") for form in forms if form.get("fullText")),
                 None,
             )
         if name:
-            return " ".join(
-                str(name).split()
-            )
+            return " ".join(str(name).split())
     return fid
 
 
 class Checkpoint:
-    """Persistent discovery queue and successful FamilySearch responses."""
+    """Persistent discovery queue and successful FamilySearch responses"""
 
     def __init__(self, path):
-        self.path = Path(
-            path
-        ).expanduser()
-        self.path.parent.mkdir(
-            parents=True, exist_ok=True
-        )
+        self.path = Path(path).expanduser()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = RLock()
-        self.connection = (
-            sqlite3.connect(
-                self.path,
-                check_same_thread=False,
-            )
+        self.connection = sqlite3.connect(
+            self.path,
+            check_same_thread=False,
         )
         os.chmod(self.path, 0o600)
         with self.lock, self.connection:
@@ -207,30 +150,21 @@ class Checkpoint:
     def save_review_notes(self, notes):
         with self.lock, self.connection:
             self.connection.executemany(
-                "INSERT OR REPLACE INTO review_notes (fid, content) "
-                "VALUES (?, ?)",
-                (
-                    (fid, text)
-                    for fid, text in notes.items()
-                ),
+                "INSERT OR REPLACE INTO review_notes (fid, content) VALUES (?, ?)",
+                ((fid, text) for fid, text in notes.items()),
             )
 
     def close(self):
         with self.lock:
             self.connection.close()
 
-    def set_origin(
-        self, identifier, language="en"
-    ):
+    def set_origin(self, identifier, language="en"):
         """Reject a checkpoint belonging to a different starting person."""
         with self.lock, self.connection:
             row = self.connection.execute(
                 "SELECT value FROM metadata WHERE key = 'origin'"
             ).fetchone()
-            if (
-                row
-                and row[0] != identifier
-            ):
+            if row and row[0] != identifier:
                 raise ValueError(
                     translate(
                         language,
@@ -268,8 +202,7 @@ class Checkpoint:
     def next_pending(self):
         with self.lock:
             row = self.connection.execute(
-                "SELECT fid FROM people WHERE status = 'pending' "
-                "ORDER BY rowid LIMIT 1"
+                "SELECT fid FROM people WHERE status = 'pending' ORDER BY rowid LIMIT 1"
             ).fetchone()
         return row[0] if row else None
 
@@ -278,9 +211,7 @@ class Checkpoint:
             return self.connection.execute(
                 "SELECT COUNT(*) FROM people WHERE status = ?",
                 (status,),
-            ).fetchone()[
-                0
-            ]
+            ).fetchone()[0]
 
     def completed_ids(self):
         with self.lock:
@@ -297,12 +228,7 @@ class Checkpoint:
                 "SELECT data FROM responses WHERE request_key = ?",
                 (key,),
             ).fetchone()
-        return (
-            json.loads(row[0])
-            if row
-            else None
-        )
-
+        return json.loads(row[0]) if row else None
 
     def get_responses(self, keys):
         """Read cached JSON responses in bounded SQLite batches"""
@@ -316,7 +242,7 @@ class Checkpoint:
 
         with self.lock:
             for start in range(0, len(keys), batch_size):
-                batch = keys[start:start + batch_size]
+                batch = keys[start : start + batch_size]
 
                 placeholders = ",".join("?" for _ in batch)
 
@@ -334,9 +260,7 @@ class Checkpoint:
 
         return found
 
-    def save_response(
-        self, key, document
-    ):
+    def save_response(self, key, document):
         with self.lock, self.connection:
             self.connection.execute(
                 "INSERT OR REPLACE INTO responses (request_key, data) VALUES (?, ?)",
@@ -353,13 +277,7 @@ class Checkpoint:
         with self.lock, self.connection:
             added = self.connection.executemany(
                 "INSERT OR IGNORE INTO people (fid) VALUES (?)",
-                (
-                    (person,)
-                    for person in sorted(
-                        discovered
-                    )
-                    if person != fid
-                ),
+                ((person,) for person in sorted(discovered) if person != fid),
             ).rowcount
             self.connection.execute(
                 "UPDATE people SET status = 'done' WHERE fid = ?",
@@ -386,17 +304,9 @@ def crawl(
     max_people=0 removes the person cap; progress=0 silences progress messages.
     """
     done = checkpoint.count("done")
-    pending = checkpoint.count(
-        "pending"
-    )
+    pending = checkpoint.count("pending")
     if progress:
-        limit = (
-            str(max_people)
-            if max_people
-            else translate(
-                language, "unlimited"
-            )
-        )
+        limit = str(max_people) if max_people else translate(language, "unlimited")
         print(
             translate(
                 language,
@@ -409,29 +319,18 @@ def crawl(
             flush=True,
         )
 
-    while (
-        max_people == 0
-        or done < max_people
-    ):
+    while max_people == 0 or done < max_people:
         fid = checkpoint.next_pending()
         if fid is None:
             break
-        report = bool(
-            progress
-            and (done + 1) % progress
-            == 0
-        )
+        report = bool(progress and (done + 1) % progress == 0)
         if report:
             print(
                 translate(
                     language,
                     "exploring",
                     position=done + 1,
-                    total=(
-                        f"/{max_people}"
-                        if max_people
-                        else ""
-                    ),
+                    total=(f"/{max_people}" if max_people else ""),
                     fid=fid,
                 ),
                 file=sys.stderr,
@@ -439,22 +338,13 @@ def crawl(
             )
 
         key = PERSON_URL + fid
-        document = (
-            checkpoint.get_response(key)
-        )
+        document = checkpoint.get_response(key)
         if document is None:
-            document = session.get_url(
-                key
-            )
+            document = session.get_url(key)
             if document is not None:
-                checkpoint.save_response(
-                    key, document
-                )
+                checkpoint.save_response(key, document)
         if not document or not any(
-            person.get("id") == fid
-            for person in document.get(
-                "persons", []
-            )
+            person.get("id") == fid for person in document.get("persons", [])
         ):
             checkpoint.fail(fid)
             print(
@@ -469,67 +359,41 @@ def crawl(
             continue
         # The families endpoint also includes siblings and other relatives
         # that the regular person response may not return.
-        families_key = (
-            FAMILIES_URL.format(fid)
-        )
-        families = (
-            checkpoint.get_response(
-                families_key
-            )
-        )
+        families_key = FAMILIES_URL.format(fid)
+        families = checkpoint.get_response(families_key)
         if families is None:
-            families = session.get_url(
-                families_key
-            )
+            families = session.get_url(families_key)
             if families is not None:
                 checkpoint.save_response(
                     families_key,
                     families,
                 )
-        discovered = related_people(
-            document
-        )
+        discovered = related_people(document)
         if families:
-            discovered.update(
-                related_people(families)
-            )
-        added = checkpoint.finish(
-            fid, discovered
-        )
+            discovered.update(related_people(families))
+        added = checkpoint.finish(fid, discovered)
         done += 1
         if report:
             print(
                 translate(
                     language,
                     "found",
-                    name=person_display_name(
-                        document, fid
-                    ),
+                    name=person_display_name(document, fid),
                     fid=fid,
                     added=added,
-                    pending=checkpoint.count(
-                        "pending"
-                    ),
+                    pending=checkpoint.count("pending"),
                 ),
                 file=sys.stderr,
                 flush=True,
             )
-    pending = checkpoint.count(
-        "pending"
-    )
+    pending = checkpoint.count("pending")
     failed = checkpoint.count("failed")
-    complete = (
-        pending == 0 and failed == 0
-    )
+    complete = pending == 0 and failed == 0
     if progress:
         print(
             translate(
                 language,
-                (
-                    "complete"
-                    if complete
-                    else "paused"
-                ),
+                ("complete" if complete else "paused"),
                 done=done,
                 pending=pending,
                 failed=failed,
@@ -550,45 +414,26 @@ def _combined_documents(documents):
             "places",
         )
     }
-    seen = {
-        key: set() for key in combined
-    }
+    seen = {key: set() for key in combined}
     for document in documents:
         for key in combined:
-            for item in document.get(
-                key, []
-            ):
-                marker = item.get(
-                    "id"
-                ) or json.dumps(
-                    item, sort_keys=True
-                )
-                if (
-                    marker
-                    not in seen[key]
-                ):
-                    seen[key].add(
-                        marker
-                    )
-                    combined[
-                        key
-                    ].append(item)
+            for item in document.get(key, []):
+                marker = item.get("id") or json.dumps(item, sort_keys=True)
+                if marker not in seen[key]:
+                    seen[key].add(marker)
+                    combined[key].append(item)
     return combined
 
 
 class ReplaySession:
     """Expose cached person responses to the original GEDCOM exporter"""
 
-    def __init__(
-        self, session, checkpoint
-    ):
+    def __init__(self, session, checkpoint):
         self.session = session
         self.checkpoint = checkpoint
 
     def __getattr__(self, name):
-        return getattr(
-            self.session, name
-        )
+        return getattr(self.session, name)
 
     def get_url(
         self,
@@ -597,60 +442,32 @@ class ReplaySession:
         no_api=False,
     ):
         if url.startswith(PERSON_URL):
-            ids = url[
-                len(PERSON_URL) :
-            ].split(",")
+            ids = url[len(PERSON_URL) :].split(",")
             documents = []
             for fid in ids:
-                document = self.checkpoint.get_response(
-                    PERSON_URL + fid
-                )
+                document = self.checkpoint.get_response(PERSON_URL + fid)
                 if document is None:
-                    raise RuntimeError(
-                        f"Missing cached person {fid}"
-                    )
-                documents.append(
-                    document
-                )
-            combined = (
-                _combined_documents(
-                    documents
-                )
-            )
+                    raise RuntimeError(f"Missing cached person {fid}")
+                documents.append(document)
+            combined = _combined_documents(documents)
             # A FamilySearch response can include additional relatives whose
             # profiles were not requested. Do not silently export them when
             # the user selected a bounded generation or family scope.
             chosen = set(ids)
             combined["persons"] = [
-                person
-                for person in combined[
-                    "persons"
-                ]
-                if person.get("id")
-                in chosen
+                person for person in combined["persons"] if person.get("id") in chosen
             ]
             return combined
 
-        accept = (
-            headers.get("Accept", "")
-            if headers
-            else ""
-        )
+        accept = headers.get("Accept", "") if headers else ""
         key = f"{int(no_api)}:{accept}:{url}"
-        document = self.checkpoint.get_response(
-            key
-        )
+        document = self.checkpoint.get_response(key)
         if document is None:
-            document = (
-                self.session.get_url(
-                    url, headers, no_api
-                )
-            )
+            document = self.session.get_url(url, headers, no_api)
             if document is not None:
-                self.checkpoint.save_response(
-                    key, document
-                )
+                self.checkpoint.save_response(key, document)
         return document
+
 
 def assemble(
     checkpoint,
@@ -665,19 +482,13 @@ def assemble(
     language="en",
 ):
     """Build a GEDCOM snapshot containing only the selected scope"""
-    ids = (
-        checkpoint.completed_ids()
-        if selected_ids is None
-        else list(selected_ids)
-    )
+    ids = checkpoint.completed_ids() if selected_ids is None else list(selected_ids)
 
     if not ids:
         return 0, 0
 
     tree = ExportTree(
-        ReplaySession(
-            session, checkpoint
-        ),
+        ReplaySession(session, checkpoint),
         no_sources=no_sources,
         no_memories=no_memories,
     )
@@ -685,13 +496,8 @@ def assemble(
     total = len(ids)
     batch_size = 100
 
-
-    for start in range(
-        0, total, batch_size
-    ):
-        end = min(
-            start + batch_size, total
-        )
+    for start in range(0, total, batch_size):
+        end = min(start + batch_size, total)
 
         print(
             translate(
@@ -718,27 +524,20 @@ def assemble(
             flush=True,
         )
 
-    # Rebuild relationships from *all* cached responses, not just those
-    # visible while Tree.add_indis was loading a particular batch.
-    # Otherwise couples and children crossing a 200-person batch boundary
-    # are silently omitted from the GEDCOM.
+    # Rebuild relationships from all cached responses after loading individuals.
+    # This prevents relationships spanning multiple batches from being omitted
+    # from the GEDCOM export.
     parent_links = set()
     parent_child_edges = set()
     couple_links = {}
     for fid in ids:
         for document in (
-            checkpoint.get_response(
-                PERSON_URL + fid
-            ),
-            checkpoint.get_response(
-                FAMILIES_URL.format(fid)
-            ),
+            checkpoint.get_response(PERSON_URL + fid),
+            checkpoint.get_response(FAMILIES_URL.format(fid)),
         ):
             if not document:
                 continue
-            for (
-                relationship
-            ) in document.get(
+            for relationship in document.get(
                 "childAndParentsRelationships",
                 [],
             ):
@@ -762,14 +561,8 @@ def assemble(
                             child,
                         )
                     )
-            for (
-                relationship
-            ) in document.get(
-                "relationships", []
-            ):
-                kind = relationship.get(
-                    "type"
-                )
+            for relationship in document.get("relationships", []):
+                kind = relationship.get("type")
                 first = _member_id(
                     relationship,
                     "person1",
@@ -778,68 +571,39 @@ def assemble(
                     relationship,
                     "person2",
                 )
-                if (
-                    kind
-                    == "http://gedcomx.org/ParentChild"
-                ):
-                    if (
-                        first
-                        in tree.indi
-                        and second
-                        in tree.indi
-                    ):
+                if kind == "http://gedcomx.org/ParentChild":
+                    if first in tree.indi and second in tree.indi:
                         parent_child_edges.add(
                             (
                                 first,
                                 second,
                             )
                         )
-                elif (
-                    kind
-                    == "http://gedcomx.org/Couple"
+                elif (kind == "http://gedcomx.org/Couple") and (
+                    first in tree.indi and second in tree.indi
                 ):
-                    if (
-                        first
-                        in tree.indi
-                        and second
-                        in tree.indi
-                    ):
-                        couple_links.setdefault(
-                            frozenset(
-                                (
-                                    first,
-                                    second,
-                                )
-                            ),
+                    couple_links.setdefault(
+                        frozenset(
                             (
                                 first,
                                 second,
-                                relationship.get(
-                                    "id"
-                                ),
-                            ),
-                        )
+                            )
+                        ),
+                        (
+                            first,
+                            second,
+                            relationship.get("id"),
+                        ),
+                    )
 
     for father, mother, child in sorted(
         parent_links,
-        key=lambda link: tuple(
-            item or "" for item in link
-        ),
+        key=lambda link: tuple(item or "" for item in link),
     ):
-        father = (
-            father
-            if father in tree.indi
-            else None
-        )
-        mother = (
-            mother
-            if mother in tree.indi
-            else None
-        )
+        father = father if father in tree.indi else None
+        mother = mother if mother in tree.indi else None
         if father or mother:
-            tree.add_trio(
-                father, mother, child
-            )
+            tree.add_trio(father, mother, child)
 
     # Families may return a ParentChild link without a full
     # ChildAndParents relationship. Preserve such links if no matching
@@ -851,66 +615,37 @@ def assemble(
         if parent
     }
     fallback_families = {}
-    for parent, child in sorted(
-        parent_child_edges
-    ):
+    for parent, child in sorted(parent_child_edges):
         if (
             parent,
             child,
         ) in full_parent_edges:
             continue
-        gender = tree.indi[
-            parent
-        ].gender
+        gender = tree.indi[parent].gender
         if gender not in {"M", "F"}:
             # The relationship is retained in SQLite; do not silently
             # invent a father/mother role for a person of unknown sex.
             continue
-        role = (
-            "father"
-            if gender == "M"
-            else "mother"
-        )
-        roles = fallback_families.setdefault(
-            child, {}
-        )
-        roles.setdefault(
-            role, set()
-        ).add(parent)
+        role = "father" if gender == "M" else "mother"
+        roles = fallback_families.setdefault(child, {})
+        roles.setdefault(role, set()).add(parent)
 
-    for child, roles in sorted(
-        fallback_families.items()
-    ):
-        fathers = roles.get(
-            "father", set()
-        )
-        mothers = roles.get(
-            "mother", set()
-        )
+    for child, roles in sorted(fallback_families.items()):
+        fathers = roles.get("father", set())
+        mothers = roles.get("mother", set())
         # Multiple partners cannot be safely paired without an explicit
         # ChildAndParents relationship. Keep those parents separate.
-        if (
-            len(fathers) == 1
-            and len(mothers) == 1
-        ):
+        if len(fathers) == 1 and len(mothers) == 1:
             tree.add_trio(
                 next(iter(fathers)),
                 next(iter(mothers)),
                 child,
             )
         else:
-            for father in sorted(
-                fathers
-            ):
-                tree.add_trio(
-                    father, None, child
-                )
-            for mother in sorted(
-                mothers
-            ):
-                tree.add_trio(
-                    None, mother, child
-                )
+            for father in sorted(fathers):
+                tree.add_trio(father, None, child)
+            for mother in sorted(mothers):
+                tree.add_trio(None, mother, child)
 
     for (
         first,
@@ -930,42 +665,25 @@ def assemble(
         tree.indi[first].add_fams(pair)
         tree.indi[second].add_fams(pair)
         if relationship_id:
-            tree.fam[pair].add_marriage(
-                relationship_id
-            )
+            tree.fam[pair].add_marriage(relationship_id)
 
-    if (
-        not no_notes
-        or not no_contributors
-    ):
-        with ThreadPoolExecutor(
-            max_workers=workers
-        ) as executor:
+    if not no_notes or not no_contributors:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = []
             if not no_notes:
                 futures.extend(
-                    executor.submit(
-                        person.get_notes
-                    )
-                    for person in tree.indi.values()
+                    executor.submit(person.get_notes) for person in tree.indi.values()
                 )
                 futures.extend(
-                    executor.submit(
-                        family.get_notes
-                    )
-                    for family in tree.fam.values()
+                    executor.submit(family.get_notes) for family in tree.fam.values()
                 )
             if not no_contributors:
                 futures.extend(
-                    executor.submit(
-                        person.get_contributors
-                    )
+                    executor.submit(person.get_contributors)
                     for person in tree.indi.values()
                 )
                 futures.extend(
-                    executor.submit(
-                        family.get_contributors
-                    )
+                    executor.submit(family.get_contributors)
                     for family in tree.fam.values()
                 )
             total_tasks = len(futures)
@@ -983,16 +701,10 @@ def assemble(
             for (
                 count,
                 future,
-            ) in enumerate(
-                as_completed(futures), 1
-            ):
+            ) in enumerate(as_completed(futures), 1):
                 future.result()
 
-                if (
-                    count % 100 == 0
-                    or count
-                    == total_tasks
-                ):
+                if count % 100 == 0 or count == total_tasks:
                     print(
                         translate(
                             language,
@@ -1006,15 +718,9 @@ def assemble(
 
     tree.reset_num()
     output = Path(output).expanduser()
-    output.parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    temporary = output.with_name(
-        output.name + ".tmp"
-    )
-    with temporary.open(
-        "w", encoding="utf-8"
-    ) as file:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(output.name + ".tmp")
+    with temporary.open("w", encoding="utf-8") as file:
         tree.print(file)
     temporary.replace(output)
     return len(tree.indi), len(tree.fam)
@@ -1022,63 +728,36 @@ def assemble(
 
 def resolve_output_path(destination):
     """Accept either an explicit .ged file or a folder for a new export"""
-    destination = Path(
-        destination
-    ).expanduser()
-    if (
-        destination.suffix.lower()
-        == ".ged"
-    ):
+    destination = Path(destination).expanduser()
+    if destination.suffix.lower() == ".ged":
         return destination
     if destination.suffix:
-        raise ValueError(
-            "Expected a .ged filename or a folder path"
-        )
-    return (
-        destination
-        / "GetMyFamilyTree.ged"
-    )
+        raise ValueError("Expected a .ged filename or a folder path")
+    return destination / "GetMyFamilyTree.ged"
 
 
 def main(argv=None):
-    if argv is None:
-        argv = sys.argv[1:]
-    else:
-        argv = list(argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
 
     if argv and argv[0] == "research":
         from getmyfamilytree.research_cli import run as run_research
 
         return run_research(argv[1:], Checkpoint)
     # Read the language before constructing the translated argparse help
-    language_parser = (
-        argparse.ArgumentParser(
-            add_help=False
-        )
-    )
+    language_parser = argparse.ArgumentParser(add_help=False)
     language_parser.add_argument(
         "--language",
         "--lang",
         choices=("auto", "en", "es"),
         default="auto",
     )
-    language_options, _ = (
-        language_parser.parse_known_args(
-            argv
-        )
-    )
-    language = resolve_language(
-        language_options.language
-    )
+    language_options, _ = language_parser.parse_known_args(argv)
+    language = resolve_language(language_options.language)
 
     def tr(message, **values):
-        return translate(
-            language, message, **values
-        )
+        return translate(language, message, **values)
 
-    parser = argparse.ArgumentParser(
-        description=tr("description")
-    )
+    parser = argparse.ArgumentParser(description=tr("description"))
     parser.add_argument(
         "--language",
         "--lang",
@@ -1194,113 +873,55 @@ def main(argv=None):
             or args.generations < 0
             or args.distance is not None
         ):
-            parser.error(
-                tr("error_generations")
-            )
+            parser.error(tr("error_generations"))
     elif args.scope == "family":
-        if (
-            args.distance is None
-            or args.distance < 0
-            or args.generations
-            is not None
-        ):
-            parser.error(
-                tr("error_distance")
-            )
-    elif (
-        args.generations is not None
-        or args.distance is not None
-    ):
-        parser.error(
-            tr("error_full_options")
-        )
-    if (
-        args.max_people < 0
-        or args.rate_limit < 1
-        or args.progress_every < 0
-    ):
-        parser.error(
-            tr("error_invalid_limits")
-        )
+        if args.distance is None or args.distance < 0 or args.generations is not None:
+            parser.error(tr("error_distance"))
+    elif args.generations is not None or args.distance is not None:
+        parser.error(tr("error_full_options"))
+    if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
+        parser.error(tr("error_invalid_limits"))
     credentials = CredentialStore()
     if args.forget_login:
         if args.remember_login:
-            parser.error(
-                tr(
-                    "error_forget_conflict"
-                )
-            )
+            parser.error(tr("error_forget_conflict"))
         try:
-            removed = (
-                credentials.clear()
-            )
+            removed = credentials.clear()
         except CredentialStoreError:
             parser.exit(
                 2,
-                tr(
-                    "error_forget_keyring"
-                )
-                + "\n",
+                tr("error_forget_keyring") + "\n",
             )
-        print(
-            tr(
-                "saved_removed"
-                if removed
-                else "saved_not_found"
-            )
-        )
+        print(tr("saved_removed" if removed else "saved_not_found"))
         return
 
     if not args.output:
         parser.error(
-            tr(
-                "error_report_requires_output"
-            )
+            tr("error_report_requires_output")
             if args.report_only
             else tr("error_required")
         )
     try:
-        output_path = (
-            resolve_output_path(
-                args.output
-            )
-        )
+        output_path = resolve_output_path(args.output)
     except ValueError:
-        parser.error(
-            tr("error_output_path")
-        )
+        parser.error(tr("error_output_path"))
 
-    checkpoint_path = (
-        args.database
-        or output_path.with_suffix(
-            ".sqlite"
-        )
-    )
+    checkpoint_path = args.database or output_path.with_suffix(".sqlite")
     if args.report_only:
-        if (
-            not checkpoint_path.expanduser().is_file()
-        ):
+        if not checkpoint_path.expanduser().is_file():
             parser.error(
                 tr(
                     "error_report_database_missing",
                     path=checkpoint_path,
                 )
             )
-        report_checkpoint = Checkpoint(
-            checkpoint_path
-        )
+        report_checkpoint = Checkpoint(checkpoint_path)
         try:
             selected_ids = None
             if args.scope != "full":
-                origin = (
-                    report_checkpoint.get_origin()
-                )
+                origin = report_checkpoint.get_origin()
                 if not origin:
-                    parser.error(
-                        tr(
-                            "error_scope_origin"
-                        )
-                    )
+                    parser.error(tr("error_scope_origin"))
                 scoped = crawl_scope(
                     report_checkpoint,
                     None,
@@ -1312,9 +933,7 @@ def main(argv=None):
                     progress=0,
                     language=language,
                 )
-                selected_ids = (
-                    scoped.ids
-                )
+                selected_ids = scoped.ids
             result = write_person_report(
                 report_checkpoint,
                 output_path,
@@ -1340,26 +959,12 @@ def main(argv=None):
         return
 
     if not args.individual:
-        parser.error(
-            tr("error_required")
-        )
-    if not PERSON_ID.fullmatch(
-        args.individual
-    ):
-        parser.error(
-            tr("error_invalid_id")
-        )
-    if (
-        args.max_people < 0
-        or args.rate_limit < 1
-        or args.progress_every < 0
-    ):
-        parser.error(
-            tr("error_invalid_limits")
-        )
-    checkpoint = Checkpoint(
-        checkpoint_path
-    )
+        parser.error(tr("error_required"))
+    if not PERSON_ID.fullmatch(args.individual):
+        parser.error(tr("error_invalid_id"))
+    if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
+        parser.error(tr("error_invalid_limits"))
+    checkpoint = Checkpoint(checkpoint_path)
     try:
         try:
             checkpoint.set_origin(
@@ -1368,14 +973,10 @@ def main(argv=None):
             )
         except ValueError as error:
             parser.exit(2, f"{error}\n")
-        checkpoint.seed(
-            [args.individual]
-        )
+        checkpoint.seed([args.individual])
         checkpoint.retry_failed()
         try:
-            saved_login = (
-                credentials.load()
-            )
+            saved_login = credentials.load()
         except CredentialStoreError:
             saved_login = None
             print(
@@ -1383,24 +984,16 @@ def main(argv=None):
                 file=sys.stderr,
             )
 
-        using_saved_login = (
-            saved_login is not None
-        )
+        using_saved_login = saved_login is not None
         if saved_login:
-            username, password = (
-                saved_login
-            )
+            username, password = saved_login
             print(
                 tr("saved_login_used"),
                 file=sys.stderr,
             )
         else:
-            username = input(
-                tr("username_prompt")
-            )
-            password = getpass.getpass(
-                tr("password_prompt")
-            )
+            username = input(tr("username_prompt"))
+            password = getpass.getpass(tr("password_prompt"))
 
         session = Session(
             username,
@@ -1408,22 +1001,13 @@ def main(argv=None):
             rate_limit=args.rate_limit,
             delay=0.2,
         )
-        if (
-            not session.logged
-            and using_saved_login
-        ):
+        if not session.logged and using_saved_login:
             print(
-                tr(
-                    "saved_login_rejected"
-                ),
+                tr("saved_login_rejected"),
                 file=sys.stderr,
             )
-            username = input(
-                tr("username_prompt")
-            )
-            password = getpass.getpass(
-                tr("password_prompt")
-            )
+            username = input(tr("username_prompt"))
+            password = getpass.getpass(tr("password_prompt"))
             session = Session(
                 username,
                 password,
@@ -1433,28 +1017,21 @@ def main(argv=None):
         if not session.logged:
             parser.exit(
                 2,
-                tr("error_login")
-                + "\n",
+                tr("error_login") + "\n",
             )
 
         if args.remember_login or (
-            using_saved_login
-            and saved_login
-            != (username, password)
+            using_saved_login and saved_login != (username, password)
         ):
             try:
-                credentials.save(
-                    username, password
-                )
+                credentials.save(username, password)
                 print(
                     tr("login_saved"),
                     file=sys.stderr,
                 )
             except CredentialStoreError:
                 print(
-                    tr(
-                        "login_save_failed"
-                    ),
+                    tr("login_save_failed"),
                     file=sys.stderr,
                 )
         del password
@@ -1479,8 +1056,7 @@ def main(argv=None):
         )
         if scoped.interrupted:
             print(
-                "\n"
-                + tr("interrupted"),
+                "\n" + tr("interrupted"),
                 file=sys.stderr,
             )
 

@@ -1,10 +1,8 @@
-
 """Persistent genealogy research planning and manual organization"""
 
 import json
 
 from getmyfamilytree.research_recommendations import build_recommendations
-
 
 VALID_STATUSES = {"pending", "in_progress", "done", "postponed"}
 
@@ -79,19 +77,14 @@ class ResearchPlan:
 
             next_position = 0 if maximum is None else maximum + 1
 
-            new_people = [
-                fid for fid in identifiers if fid not in existing
-            ]
+            new_people = [fid for fid in identifiers if fid not in existing]
 
             self.checkpoint.connection.executemany(
                 """
                 INSERT INTO research_tasks (fid, position)
                 VALUES (?, ?)
                 """,
-                (
-                    (fid, next_position + index)
-                    for index, fid in enumerate(new_people)
-                ),
+                ((fid, next_position + index) for index, fid in enumerate(new_people)),
             )
 
         return len(identifiers)
@@ -184,8 +177,7 @@ class ResearchPlan:
                 raise ValueError("Starting person is not available")
 
             valid_roots = {
-                branch["id"]
-                for branch in recommendations[origin]["branches"]
+                branch["id"] for branch in recommendations[origin]["branches"]
             }
 
             if any(root not in valid_roots for root in branch_ids):
@@ -275,16 +267,9 @@ class ResearchPlan:
 
         origin = self.checkpoint.get_origin()
 
-        root_branches = recommendations.get(origin, {}).get(
-            "branches", []
-        )
-        roots_by_id = {
-            branch["id"]: branch for branch in root_branches
-        }
-        root_index = {
-            branch["id"]: index
-            for index, branch in enumerate(root_branches)
-        }
+        root_branches = recommendations.get(origin, {}).get("branches", [])
+        roots_by_id = {branch["id"]: branch for branch in root_branches}
+        root_index = {branch["id"]: index for index, branch in enumerate(root_branches)}
 
         status_order = {
             "in_progress": 0,
@@ -316,9 +301,7 @@ class ResearchPlan:
             if manual_branches is not None:
                 saved_ids = json.loads(manual_branches)
                 branches = [
-                    roots_by_id[root]
-                    for root in saved_ids
-                    if root in roots_by_id
+                    roots_by_id[root] for root in saved_ids if root in roots_by_id
                 ]
 
             branch_rank = min(
@@ -358,9 +341,7 @@ class ResearchPlan:
                     "branches_are_manual": manual_branches is not None,
                     "affinity_links": suggestion["affinity_links"],
                     "_sort": (
-                        manual_sort
-                        if order == "manual"
-                        else recommendation_sort
+                        manual_sort if order == "manual" else recommendation_sort
                     ),
                 }
             )

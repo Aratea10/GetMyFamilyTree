@@ -1,4 +1,3 @@
-
 """Regression tests for GEDCOM tree worker management"""
 
 import unittest
@@ -20,9 +19,7 @@ class ExportTreeTests(unittest.TestCase):
 
         self.person = {"id": "AAAA-111"}
 
-        self.session.get_url.return_value = {
-            "persons": [self.person]
-        }
+        self.session.get_url.return_value = {"persons": [self.person]}
 
     def test_loads_people_without_creating_event_loop(self):
         individual = Mock()
@@ -34,9 +31,7 @@ class ExportTreeTests(unittest.TestCase):
             ),
             patch(
                 "asyncio.new_event_loop",
-                side_effect=AssertionError(
-                    "Unexpected event loop creation"
-                ),
+                side_effect=AssertionError("Unexpected event loop creation"),
             ),
         ):
             self.tree.add_indis(["AAAA-111"])
@@ -46,9 +41,7 @@ class ExportTreeTests(unittest.TestCase):
             individual,
         )
 
-        individual.add_data.assert_called_once_with(
-            self.person
-        )
+        individual.add_data.assert_called_once_with(self.person)
 
         self.session.get_url.assert_called_once_with(
             "/platform/tree/persons?pids=AAAA-111"
@@ -64,19 +57,19 @@ class ExportTreeTests(unittest.TestCase):
     def test_worker_errors_are_propagated(self):
         individual = Mock()
 
-        individual.add_data.side_effect = RuntimeError(
-            "Person loading failed"
-        )
+        individual.add_data.side_effect = RuntimeError("Person loading failed")
 
-        with patch(
-            "getmyfamilytree.gedcom_tree.Indi",
-            return_value=individual,
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "getmyfamilytree.gedcom_tree.Indi",
+                return_value=individual,
+            ),
+            self.assertRaisesRegex(
                 RuntimeError,
                 "Person loading failed",
-            ):
-                self.tree.add_indis(["AAAA-111"])
+            ),
+        ):
+            self.tree.add_indis(["AAAA-111"])
 
     def test_empty_input_does_not_request_data(self):
         self.tree.add_indis([])

@@ -131,5 +131,6 @@ class ResearchPlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             plan.set_status("AAAA-111", "deleted")
 
+
 if __name__ == "__main__":
     unittest.main()

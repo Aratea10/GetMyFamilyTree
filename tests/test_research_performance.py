@@ -3,8 +3,9 @@ import unittest
 from pathlib import Path
 
 from getmyfamilytree.cli import Checkpoint
-from getmyfamilytree.reports import PERSON_URL, FAMILIES_URL
+from getmyfamilytree.reports import FAMILIES_URL, PERSON_URL
 from getmyfamilytree.research_recommendations import build_recommendations
+
 
 class ResearchPerformanceTests(unittest.TestCase):
     """Regression test: large linear genealogy tree"""
@@ -65,6 +66,7 @@ class ResearchPerformanceTests(unittest.TestCase):
         self.assertIn(last, recos)
         self.assertEqual(recos[last]["category"], "descendant")
         self.assertEqual(recos[last]["generation"], 199)
+
 
 if __name__ == "__main__":
     unittest.main()

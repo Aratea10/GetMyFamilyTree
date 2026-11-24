@@ -1,10 +1,10 @@
-
 """Measure research recommendation performance with synthetic trees"""
 
 import argparse
 import gc
 import tempfile
 import tracemalloc
+from itertools import pairwise
 from pathlib import Path
 from time import perf_counter
 
@@ -36,10 +36,7 @@ def couple(first, second):
 
 
 def populate(checkpoint, size, shape):
-    identifiers = [
-        make_identifier(index)
-        for index in range(size)
-    ]
+    identifiers = [make_identifier(index) for index in range(size)]
 
     checkpoint.set_origin(identifiers[0])
     checkpoint.seed(identifiers)
@@ -60,16 +57,10 @@ def populate(checkpoint, size, shape):
         checkpoint.finish(fid, [])
 
     if shape == "chain":
-        for parent, child in zip(
-            identifiers, identifiers[1:]
-        ):
+        for parent, child in pairwise(identifiers):
             checkpoint.save_response(
                 FAMILIES_URL.format(parent),
-                {
-                    "childAndParentsRelationships": [
-                        parent_child(child, parent)
-                    ]
-                },
+                {"childAndParentsRelationships": [parent_child(child, parent)]},
             )
 
     elif shape == "overlap":
@@ -81,11 +72,7 @@ def populate(checkpoint, size, shape):
             relationships = []
             parentage = []
 
-            spouse = (
-                spouses[index]
-                if index < len(spouses)
-                else None
-            )
+            spouse = spouses[index] if index < len(spouses) else None
 
             if spouse:
                 relationships.append(couple(person, spouse))
@@ -97,9 +84,7 @@ def populate(checkpoint, size, shape):
                 if spouse:
                     parents.append(spouse)
 
-                parentage.append(
-                    parent_child(child, *parents)
-                )
+                parentage.append(parent_child(child, *parents))
 
             checkpoint.save_response(
                 FAMILIES_URL.format(person),
@@ -114,14 +99,10 @@ def populate(checkpoint, size, shape):
 
 def benchmark(size, shape, measure_memory):
     with tempfile.TemporaryDirectory() as directory:
-        checkpoint = Checkpoint(
-            Path(directory) / "benchmark.sqlite"
-        )
+        checkpoint = Checkpoint(Path(directory) / "benchmark.sqlite")
 
         try:
-            identifiers = populate(
-                checkpoint, size, shape
-            )
+            identifiers = populate(checkpoint, size, shape)
 
             gc.collect()
 
@@ -131,26 +112,18 @@ def benchmark(size, shape, measure_memory):
             try:
                 started = perf_counter()
 
-                result = build_recommendations(
-                    checkpoint, identifiers
-                )
+                result = build_recommendations(checkpoint, identifiers)
 
                 elapsed = perf_counter() - started
 
-                peak = (
-                    tracemalloc.get_traced_memory()[1]
-                    if measure_memory
-                    else None
-                )
+                peak = tracemalloc.get_traced_memory()[1] if measure_memory else None
 
             finally:
                 if measure_memory:
                     tracemalloc.stop()
 
             if len(result) != size:
-                raise RuntimeError(
-                    "Unexpected recommendation count"
-                )
+                raise RuntimeError("Unexpected recommendation count")
 
             print(f"People: {size:,}")
             print(f"Tree shape: {shape}")
@@ -158,10 +131,7 @@ def benchmark(size, shape, measure_memory):
             print(f"Elapsed time: {elapsed:.4f} seconds")
 
             if peak is not None:
-                print(
-                    f"Peak Python allocations: "
-                    f"{peak / (1024 * 1024):.2f} MiB"
-                )
+                print(f"Peak Python allocations: {peak / (1024 * 1024):.2f} MiB")
                 print("Memory tracing enabled")
 
         finally:
@@ -169,9 +139,7 @@ def benchmark(size, shape, measure_memory):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Benchmark genealogy recommendations."
-    )
+    parser = argparse.ArgumentParser(description="Benchmark genealogy recommendations.")
 
     parser.add_argument(
         "--size",
@@ -193,9 +161,7 @@ def main():
     args = parser.parse_args()
 
     if not 1 <= args.size <= 10_000_000:
-        parser.error(
-            "--size must be between 1 and 10000000"
-        )
+        parser.error("--size must be between 1 and 10000000")
 
     benchmark(
         args.size,

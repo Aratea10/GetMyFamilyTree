@@ -1,15 +1,16 @@
-"""Regression tests for English/Spanish terminal messages and help."""
+"""Regression tests for English/Spanish terminal messages and help"""
+
 import io
+import tempfile
+import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from string import Formatter
-import tempfile
-import unittest
 from unittest.mock import Mock, patch
 
 from getmyfamilytree.cli import Checkpoint, crawl, main
-from getmyfamilytree.scopes import ScopeResult
 from getmyfamilytree.i18n import MESSAGES, resolve_language, translate
+from getmyfamilytree.scopes import ScopeResult
 
 
 class TranslationTests(unittest.TestCase):
@@ -29,15 +30,20 @@ class TranslationTests(unittest.TestCase):
         for key, english in MESSAGES["en"].items():
             with self.subTest(message=key):
                 spanish = MESSAGES["es"][key]
-                variables = lambda text: {
-                    field for _, field, _, _ in parser.parse(text) if field
-                }
+
+                def variables(text):
+                    return {field for _, field, _, _ in parser.parse(text) if field}
+
                 self.assertEqual(variables(english), variables(spanish))
 
     def test_genealogical_names_remain_unchanged(self):
         line = translate(
-            "es", "found", name="María da Silva", fid="AAAA-111",
-            added=2, pending=8,
+            "es",
+            "found",
+            name="María da Silva",
+            fid="AAAA-111",
+            added=2,
+            pending=8,
         )
         self.assertIn("María da Silva", line)
         self.assertIn("AAAA-111", line)
@@ -67,9 +73,11 @@ class TranslationTests(unittest.TestCase):
         class OnePersonSession:
             def get_url(self, url, headers=None, no_api=False):
                 if "pids=" in url:
-                    return {"persons": [
-                        {"id": "AAAA-111", "display": {"name": "José García"}},
-                    ]}
+                    return {
+                        "persons": [
+                            {"id": "AAAA-111", "display": {"name": "José García"}},
+                        ]
+                    }
                 return {"persons": [], "relationships": []}
 
         with tempfile.TemporaryDirectory() as folder:
@@ -78,10 +86,14 @@ class TranslationTests(unittest.TestCase):
                 store.seed(["AAAA-111"])
                 output = io.StringIO()
                 with redirect_stderr(output):
-                    self.assertTrue(crawl(
-                        store, OnePersonSession(), max_people=1,
-                        language="es",
-                    ))
+                    self.assertTrue(
+                        crawl(
+                            store,
+                            OnePersonSession(),
+                            max_people=1,
+                            language="es",
+                        )
+                    )
                 self.assertIn("Explorando 1/1: AAAA-111", output.getvalue())
                 self.assertIn("José García", output.getvalue())
                 self.assertIn("Exploración terminada", output.getvalue())
@@ -92,29 +104,32 @@ class TranslationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             output = io.StringIO()
             fake_credentials = Mock()
-            fake_credentials.load.return_value = (
-                "example-user", "example-password"
-            )
+            fake_credentials.load.return_value = ("example-user", "example-password")
             fake_session = Mock(logged=True)
             with (
-                patch("getmyfamilytree.cli.CredentialStore",
-                      return_value=fake_credentials),
-                patch("getmyfamilytree.cli.Session",
-                      return_value=fake_session),
+                patch(
+                    "getmyfamilytree.cli.CredentialStore", return_value=fake_credentials
+                ),
+                patch("getmyfamilytree.cli.Session", return_value=fake_session),
                 patch(
                     "getmyfamilytree.cli.crawl_scope",
                     return_value=ScopeResult(
                         ids=[], pending=0, failed=0, exhausted=True, reused=0
                     ),
                 ) as fake_crawl,
-                patch("getmyfamilytree.cli.assemble",
-                      return_value=(1, 0)),
+                patch("getmyfamilytree.cli.assemble", return_value=(1, 0)),
                 redirect_stderr(output),
             ):
-                main([
-                    "--language", "es", "-i", "AAAA-111",
-                    "-o", str(Path(folder) / "family.ged"),
-                ])
+                main(
+                    [
+                        "--language",
+                        "es",
+                        "-i",
+                        "AAAA-111",
+                        "-o",
+                        str(Path(folder) / "family.ged"),
+                    ]
+                )
             self.assertIn("Se está usando el inicio de sesión", output.getvalue())
             self.assertIn("Guardadas 1 personas", output.getvalue())
             self.assertEqual(fake_crawl.call_args.kwargs["language"], "es")

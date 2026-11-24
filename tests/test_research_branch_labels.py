@@ -1,4 +1,3 @@
-
 """Tests for conservative paternal and maternal branch labels"""
 
 import tempfile
@@ -13,9 +12,7 @@ from getmyfamilytree.research_recommendations import build_recommendations
 class BranchLabelTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.store = Checkpoint(
-            Path(self.temp.name) / "branches.sqlite"
-        )
+        self.store = Checkpoint(Path(self.temp.name) / "branches.sqlite")
         self.store.set_origin("SELF-111")
 
         self.ids = [
@@ -52,9 +49,7 @@ class BranchLabelTests(unittest.TestCase):
                     {
                         "id": fid,
                         "display": {"name": fid},
-                        "gender": {
-                            "type": f"http://gedcomx.org/{gender}"
-                        },
+                        "gender": {"type": f"http://gedcomx.org/{gender}"},
                     }
                 ]
             },
@@ -79,18 +74,13 @@ class BranchLabelTests(unittest.TestCase):
 
         self.store.save_response(
             FAMILIES_URL.format("SELF-111"),
-            {
-                "childAndParentsRelationships": relationships
-            },
+            {"childAndParentsRelationships": relationships},
         )
 
     def test_unknown_parent_gender_is_not_guessed(self):
         result = build_recommendations(self.store, self.ids)
 
-        sides = {
-            branch["side"]
-            for branch in result["SELF-111"]["branches"]
-        }
+        sides = {branch["side"] for branch in result["SELF-111"]["branches"]}
 
         self.assertEqual(sides, {"unknown"})
 
@@ -99,8 +89,7 @@ class BranchLabelTests(unittest.TestCase):
         result = build_recommendations(self.store, self.ids)
 
         sides_by_id = {
-            branch["id"]: branch["side"]
-            for branch in result["SELF-111"]["branches"]
+            branch["id"]: branch["side"] for branch in result["SELF-111"]["branches"]
         }
 
         self.assertEqual(sides_by_id["FATH-111"], "paternal")
@@ -115,9 +104,7 @@ class BranchLabelTests(unittest.TestCase):
         branches = result["SELF-111"]["branches"]
 
         self.assertEqual(len(branches), 3)
-        self.assertTrue(
-            all(branch["side"] == "unknown" for branch in branches)
-        )
+        self.assertTrue(all(branch["side"] == "unknown" for branch in branches))
 
 
 if __name__ == "__main__":

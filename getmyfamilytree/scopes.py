@@ -4,12 +4,13 @@ The SQLite cache is shared between scopes. Each traversal recomputes membership
 from the starting person, reuses cached responses and only downloads missing
 records. Limiting a scope does not silently change the underlying genealogy.
 """
+
 from __future__ import annotations
 
-from collections import defaultdict, deque
-from dataclasses import dataclass
 import re
 import sys
+from collections import defaultdict, deque
+from dataclasses import dataclass
 
 from getmyfamilytree.i18n import translate
 
@@ -101,19 +102,30 @@ def _person_name(document, identifier):
             continue
         name = (item.get("display") or {}).get("name")
         if not name:
-            name = next((
-                form.get("fullText")
-                for entry in item.get("names") or []
-                for form in entry.get("nameForms") or []
-                if form.get("fullText")
-            ), None)
+            name = next(
+                (
+                    form.get("fullText")
+                    for entry in item.get("names") or []
+                    for form in entry.get("nameForms") or []
+                    if form.get("fullText")
+                ),
+                None,
+            )
         return " ".join(str(name).split()) if name else identifier
     return identifier
 
 
 def crawl_scope(
-    checkpoint, session, origin, *, scope="full", generations=None,
-    distance=None, max_people=1000, progress=1, language="en",
+    checkpoint,
+    session,
+    origin,
+    *,
+    scope="full",
+    generations=None,
+    distance=None,
+    max_people=1000,
+    progress=1,
+    language="en",
 ):
     """Traverse one scope, returning exactly the downloaded members of it.
 
@@ -124,8 +136,11 @@ def crawl_scope(
     if scope not in ("full", "ancestors", "descendants", "family"):
         raise ValueError(f"Unsupported scope: {scope}")
     max_depth = (
-        generations if scope in ("ancestors", "descendants")
-        else distance if scope == "family" else None
+        generations
+        if scope in ("ancestors", "descendants")
+        else distance
+        if scope == "family"
+        else None
     )
     edges = set()
     graph = defaultdict(set)
@@ -158,12 +173,16 @@ def crawl_scope(
 
     if progress:
         print(
-            translate(language, "scope_start", scope=translate(
-                language, "scope_" + scope
-            ), limit=str(max_people) if max_people else translate(
-                language, "unlimited"
-            )),
-            file=sys.stderr, flush=True,
+            translate(
+                language,
+                "scope_start",
+                scope=translate(language, "scope_" + scope),
+                limit=str(max_people)
+                if max_people
+                else translate(language, "unlimited"),
+            ),
+            file=sys.stderr,
+            flush=True,
         )
 
     try:
@@ -196,7 +215,8 @@ def crawl_scope(
                     checkpoint.fail(fid)
                     print(
                         translate(language, "retrieval_failed", fid=fid),
-                        file=sys.stderr, flush=True,
+                        file=sys.stderr,
+                        flush=True,
                     )
                 continue
 
@@ -245,36 +265,49 @@ def crawl_scope(
             if progress and len(selected) % progress == 0:
                 print(
                     translate(
-                        language, "scope_person",
+                        language,
+                        "scope_person",
                         index=len(selected),
                         limit=f"/{max_people}" if max_people else "",
                         name=_person_name(document, fid),
-                        fid=fid, depth=depth, added=new_relatives,
+                        fid=fid,
+                        depth=depth,
+                        added=new_relatives,
                         queued=len(waiting),
                     ),
-                    file=sys.stderr, flush=True,
+                    file=sys.stderr,
+                    flush=True,
                 )
     except KeyboardInterrupt:
         interrupted = True
 
     pending_ids = {
-        fid for fid, depth in waiting
-        if depths.get(fid) == depth and fid not in selected
+        fid
+        for fid, depth in waiting
+        if depths.get(fid) == depth
+        and fid not in selected
         and fid not in attempts_failed
     }
     finished = not interrupted and not pending_ids and not attempts_failed
     result = ScopeResult(
-        ids=list(selected), pending=len(pending_ids),
-        failed=len(attempts_failed), exhausted=finished,
-        reused=reused, interrupted=interrupted,
+        ids=list(selected),
+        pending=len(pending_ids),
+        failed=len(attempts_failed),
+        exhausted=finished,
+        reused=reused,
+        interrupted=interrupted,
     )
     if progress:
         print(
             translate(
-                language, "scope_finish", selected=len(selected),
-                pending=result.pending, failed=result.failed,
+                language,
+                "scope_finish",
+                selected=len(selected),
+                pending=result.pending,
+                failed=result.failed,
                 reused=reused,
             ),
-            file=sys.stderr, flush=True,
+            file=sys.stderr,
+            flush=True,
         )
     return result
