@@ -126,43 +126,73 @@ def build_recommendations(checkpoint, identifiers):
 
     blood_distance = _distances([origin], blood_links) if origin in known else {}
 
+
     by_marriage = defaultdict(set)
     inlaw_distance = {}
     affinity_links = defaultdict(set)
-    family_cache = {}
-    spouse_distance_cache = {}
 
-    for blood_person in sorted(family):
-        for spouse_id in sorted(partners.get(blood_person, ())):
-            if spouse_id not in family_cache:
-                relatives = _parentage_family(spouse_id, parents, children)
-                family_cache[spouse_id] = relatives
+    # Group blood relatives by their shared partners.
+    blood_relatives_by_partner = defaultdict(set)
 
-                restricted_links = {
-                    fid: blood_links[fid] & relatives for fid in relatives
-                }
+    for blood_person in family:
+        for spouse_id in partners.get(blood_person, ()):
+            blood_relatives_by_partner[spouse_id].add(
+                blood_person
+            )
 
-                spouse_distance_cache[spouse_id] = _distances(
-                    [spouse_id], restricted_links
-                )
+    # Process each partner without retaining every family graph.
+    for spouse_id, blood_relatives in sorted(
+        blood_relatives_by_partner.items()
+    ):
+        relatives = _parentage_family(
+            spouse_id, parents, children
+        )
 
-            for relative in family_cache[spouse_id]:
-                if relative in family:
-                    continue
+        external_relatives = relatives - family
 
-                by_marriage[relative].update(memberships[blood_person])
-                affinity_links[relative].add((blood_person, spouse_id))
+        if not external_relatives:
+            continue
 
-                distance = (
-                    blood_distance.get(blood_person, 10_000)
-                    + 1
-                    + spouse_distance_cache[spouse_id].get(relative, 10_000)
-                )
+        restricted_links = {
+            fid: blood_links[fid] & relatives
+            for fid in relatives
+        }
 
-                inlaw_distance[relative] = min(
-                    distance,
-                    inlaw_distance.get(relative, float("inf")),
-                )
+        spouse_distances = _distances(
+            [spouse_id], restricted_links
+        )
+
+        branch_ids = set()
+
+        for blood_person in blood_relatives:
+            branch_ids.update(
+                memberships.get(blood_person, ())
+            )
+
+        closest_blood_distance = min(
+            blood_distance.get(blood_person, 10_000)
+            for blood_person in blood_relatives
+        )
+
+        links = {
+            (blood_person, spouse_id)
+            for blood_person in blood_relatives
+        }
+
+        for relative in external_relatives:
+            by_marriage[relative].update(branch_ids)
+            affinity_links[relative].update(links)
+
+            distance = (
+                closest_blood_distance
+                + 1
+                + spouse_distances.get(relative, 10_000)
+            )
+
+            inlaw_distance[relative] = min(
+                distance,
+                inlaw_distance.get(relative, float("inf")),
+            )
 
     category_order = {
         "origin": 0,
