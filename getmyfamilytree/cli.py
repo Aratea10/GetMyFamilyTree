@@ -90,6 +90,19 @@ def person_display_name(document, fid):
     return fid
 
 
+def _load_cached_response(checkpoint, session, key):
+    """Return a cached response or fetch and store it when missing."""
+    document = checkpoint.get_response(key)
+
+    if document is None:
+        document = session.get_url(key)
+
+        if document is not None:
+            checkpoint.save_response(key, document)
+
+    return document
+
+
 def crawl(
     checkpoint,
     session,
@@ -140,14 +153,11 @@ def crawl(
                 flush=True,
             )
 
-        key = PERSON_URL + fid
-        document = checkpoint.get_response(key)
-
-        if document is None:
-            document = session.get_url(key)
-
-            if document is not None:
-                checkpoint.save_response(key, document)
+        document = _load_cached_response(
+            checkpoint,
+            session,
+            PERSON_URL + fid,
+        )
 
         if not document or not any(
             person.get("id") == fid for person in document.get("persons", [])
@@ -165,16 +175,13 @@ def crawl(
             )
             continue
 
-        # The families endpoint also includes siblings and other relatives
-        # that the regular person response may not return.
-        families_key = FAMILIES_URL.format(fid)
-        families = checkpoint.get_response(families_key)
-
-        if families is None:
-            families = session.get_url(families_key)
-
-            if families is not None:
-                checkpoint.save_response(families_key, families)
+        # The families endpoint includes relatives that the regular
+        # person response may not return.
+        families = _load_cached_response(
+            checkpoint,
+            session,
+            FAMILIES_URL.format(fid),
+        )
 
         discovered = related_people(document)
 
