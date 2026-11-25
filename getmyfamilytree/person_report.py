@@ -505,7 +505,6 @@ class _PersonReportRenderer:
             ]
         )
 
-
     def render(self):
         """Return the complete report as Markdown lines."""
         lines = self._start_lines()
