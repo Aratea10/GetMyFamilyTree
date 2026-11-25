@@ -43,6 +43,12 @@ select = [
     "RUF",
 ]
 
+# These public APIs keep their established keyword parameters for compatibility.
+# Other complexity rules are still checked for both modules.
+[tool.ruff.lint.per-file-ignores]
+"getmyfamilytree/cli.py" = ["PLR0913"]
+"getmyfamilytree/scopes.py" = ["PLR0913"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
