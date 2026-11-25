@@ -15,18 +15,20 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from getmyfamilytree.reports import FAMILIES_URL, PERSON_URL, collect_reports
+from getmyfamilytree.research_assets import ASSET_ID, ResearchAssets
 from getmyfamilytree.research_plan import ResearchPlan, VALID_CATEGORIES, VALID_STATUSES
 from getmyfamilytree.scopes import _edges, _person_name
 
 CARD_KINDS = frozenset({"document", "photo", "person", "note"})
 CARD_FIELDS = frozenset(
-    {"kind", "title", "description", "url", "x", "y", "width", "rotation", "z"}
+    {"kind", "title", "description", "url", "asset_id", "x", "y", "width", "rotation", "z"}
 )
 CARD_DEFAULTS = {
     "kind": "note",
     "title": "",
     "description": "",
     "url": "",
+    "asset_id": None,
     "x": 0.0,
     "y": 0.0,
     "width": 280.0,
@@ -78,6 +80,13 @@ def _validate_card(data):
         url = urlsplit(result["url"])
         if url.scheme not in ("http", "https") or not url.netloc:
             raise ValueError("Card URLs must use http or https")
+    if result["asset_id"] is not None:
+        if not isinstance(result["asset_id"], str):
+            raise ValueError("Invalid card attachment")
+        if not ASSET_ID.fullmatch(result["asset_id"]):
+            raise ValueError("Invalid card attachment")
+        if result["url"]:
+            raise ValueError("A card cannot use both a URL and a local attachment")
 
     for field in ("x", "y", "width", "rotation"):
         value = result[field]
@@ -120,6 +129,7 @@ class ResearchWorkspace:
                     title TEXT NOT NULL,
                     description TEXT NOT NULL DEFAULT '',
                     url TEXT NOT NULL DEFAULT '',
+                    asset_id TEXT,
                     x REAL NOT NULL DEFAULT 0,
                     y REAL NOT NULL DEFAULT 0,
                     width REAL NOT NULL DEFAULT 280,
@@ -130,6 +140,15 @@ class ResearchWorkspace:
                 )
                 """
             )
+            columns = {
+                column[1] for column in checkpoint.connection.execute(
+                    "PRAGMA table_info(workspace_cards)"
+                )
+            }
+            if "asset_id" not in columns:
+                checkpoint.connection.execute(
+                    "ALTER TABLE workspace_cards ADD COLUMN asset_id TEXT"
+                )
             checkpoint.connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS workspace_card_people (
@@ -143,6 +162,7 @@ class ResearchWorkspace:
                 "CREATE INDEX IF NOT EXISTS workspace_card_people_fid "
                 "ON workspace_card_people(fid)"
             )
+        self.assets = ResearchAssets(checkpoint)
 
     def list_tasks(self, query=None):
         """Return a filtered, paginated list without modifying manual order."""
@@ -328,7 +348,7 @@ class ResearchWorkspace:
         with self.checkpoint.lock:
             rows = self.checkpoint.connection.execute(
                 """
-                SELECT id, kind, title, description, url, x, y,
+                SELECT id, kind, title, description, url, asset_id, x, y,
                        width, rotation, z, created_at, updated_at
                 FROM workspace_cards
                 ORDER BY z, created_at, id
@@ -345,8 +365,8 @@ class ResearchWorkspace:
             by_card[card_id].append(fid)
 
         columns = (
-            "id", "kind", "title", "description", "url", "x", "y",
-            "width", "rotation", "z", "created_at", "updated_at",
+            "id", "kind", "title", "description", "url", "asset_id",
+            "x", "y", "width", "rotation", "z", "created_at", "updated_at",
         )
         return [
             {**dict(zip(columns, row)), "people": by_card[row[0]]}
@@ -363,6 +383,8 @@ class ResearchWorkspace:
     def create_card(self, data, people=None):
         """Persist a new board card, with optional person links."""
         data = _validate_card(data)
+        if data["asset_id"] is not None:
+            self.assets.get(data["asset_id"])
         people = self._validate_people([] if people is None else people)
         card_id = uuid4().hex
         timestamp = _updated_at()
@@ -370,14 +392,15 @@ class ResearchWorkspace:
             self.checkpoint.connection.execute(
                 """
                 INSERT INTO workspace_cards (
-                    id, kind, title, description, url, x, y, width,
+                    id, kind, title, description, url, asset_id, x, y, width,
                     rotation, z, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     card_id, data["kind"], data["title"], data["description"],
-                    data["url"], data["x"], data["y"], data["width"],
-                    data["rotation"], data["z"], timestamp, timestamp,
+                    data["url"], data["asset_id"], data["x"], data["y"],
+                    data["width"], data["rotation"], data["z"],
+                    timestamp, timestamp,
                 ),
             )
             self._replace_card_people(card_id, people)
@@ -391,6 +414,8 @@ class ResearchWorkspace:
         data = _validate_card({
             field: existing[field] for field in CARD_FIELDS
         } | changes)
+        if data["asset_id"] is not None:
+            self.assets.get(data["asset_id"])
         linked_people = (
             existing["people"] if people is None else self._validate_people(people)
         )
@@ -398,13 +423,14 @@ class ResearchWorkspace:
             self.checkpoint.connection.execute(
                 """
                 UPDATE workspace_cards SET kind=?, title=?, description=?,
-                    url=?, x=?, y=?, width=?, rotation=?, z=?, updated_at=?
+                    url=?, asset_id=?, x=?, y=?, width=?, rotation=?, z=?,
+                    updated_at=?
                 WHERE id=?
                 """,
                 (
                     data["kind"], data["title"], data["description"], data["url"],
-                    data["x"], data["y"], data["width"], data["rotation"],
-                    data["z"], _updated_at(), card_id,
+                    data["asset_id"], data["x"], data["y"], data["width"],
+                    data["rotation"], data["z"], _updated_at(), card_id,
                 ),
             )
             self._replace_card_people(card_id, linked_people)
