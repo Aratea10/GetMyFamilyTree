@@ -421,7 +421,7 @@ class _ScopeTraversal:
 
 
 # Existing callers rely on these public scope options.
-def crawl_scope(  # noqa: PLR0913
+def crawl_scope(
     checkpoint,
     session,
     origin,
