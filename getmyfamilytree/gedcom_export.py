@@ -1,12 +1,10 @@
-"""GEDCOM export helpers for replaying cached FamilySearch responses."""
+"""GEDCOM export helpers for cached FamilySearch data"""
 
 from __future__ import annotations
 
 import json
 
-from getmyfamilytree.reports import PERSON_URL
-
-FAMILIES_URL = "/platform/tree/persons/{}/families"
+from getmyfamilytree.reports import FAMILIES_URL, PERSON_URL
 
 RELATIONSHIP_FIELDS = (
     "childAndParentsRelationships",
@@ -15,13 +13,13 @@ RELATIONSHIP_FIELDS = (
 
 
 def _member_id(relationship, name):
-    """Return the person ID referenced by a relationship member."""
+    """Return the person ID referenced by a relationship member"""
     member = relationship.get(name)
     return member.get("resourceId") if isinstance(member, dict) else None
 
 
 def _combined_documents(documents):
-    """Recreate the batch response expected by Tree.add_indis from cached pages."""
+    """Recreate the batch response expected by Tree.add_indis"""
     combined = {
         key: []
         for key in (
@@ -36,6 +34,7 @@ def _combined_documents(documents):
         for key in combined:
             for item in document.get(key, []):
                 marker = item.get("id") or json.dumps(item, sort_keys=True)
+
                 if marker not in seen[key]:
                     seen[key].add(marker)
                     combined[key].append(item)
@@ -44,7 +43,7 @@ def _combined_documents(documents):
 
 
 class ReplaySession:
-    """Expose cached person responses to the original GEDCOM exporter."""
+    """Expose cached person responses to the GEDCOM exporter"""
 
     def __init__(self, session, checkpoint):
         self.session = session
@@ -60,8 +59,10 @@ class ReplaySession:
 
             for fid in ids:
                 document = self.checkpoint.get_response(PERSON_URL + fid)
+
                 if document is None:
                     raise RuntimeError(f"Missing cached person {fid}")
+
                 documents.append(document)
 
             combined = _combined_documents(documents)
@@ -81,24 +82,26 @@ class ReplaySession:
 
         if document is None:
             document = self.session.get_url(url, headers, no_api)
+
             if document is not None:
                 self.checkpoint.save_response(key, document)
 
         return document
 
 
-def rebuild_relationships(checkpoint, tree, ids):
-    """Rebuild family relationships from cached FamilySearch responses."""
-    # Rebuild relationships across all batches of loaded individuals.
+def _collect_relationships(checkpoint, tree, ids):
+    """Collect parentage and couple links from cached responses"""
     parent_links = set()
     parent_child_edges = set()
     couple_links = {}
 
     for fid in ids:
-        for document in (
+        documents = (
             checkpoint.get_response(PERSON_URL + fid),
             checkpoint.get_response(FAMILIES_URL.format(fid)),
-        ):
+        )
+
+        for document in documents:
             if not document:
                 continue
 
@@ -127,6 +130,11 @@ def rebuild_relationships(checkpoint, tree, ids):
                         (first, second, relationship.get("id")),
                     )
 
+    return parent_links, parent_child_edges, couple_links
+
+
+def _rebuild_parentage(tree, parent_links, parent_child_edges):
+    """Restore parent-child relationships without guessing missing roles"""
     for father, mother, child in sorted(
         parent_links,
         key=lambda link: tuple(item or "" for item in link),
@@ -137,7 +145,8 @@ def rebuild_relationships(checkpoint, tree, ids):
         if father or mother:
             tree.add_trio(father, mother, child)
 
-    # Preserve ParentChild links without full parentage details.
+    # A ParentChild relationship may exist without a complete
+    # ChildAndParents relationship.
     full_parent_edges = {
         (parent, child)
         for father, mother, child in parent_links
@@ -153,8 +162,8 @@ def rebuild_relationships(checkpoint, tree, ids):
 
         gender = tree.indi[parent].gender
 
+        # Preserve unknown roles in the cache instead of guessing.
         if gender not in {"M", "F"}:
-            # Never invent a parental role for an unknown gender.
             continue
 
         role = "father" if gender == "M" else "mother"
@@ -165,7 +174,7 @@ def rebuild_relationships(checkpoint, tree, ids):
         fathers = roles.get("father", set())
         mothers = roles.get("mother", set())
 
-        # Do not invent partner pairings without explicit evidence.
+        # Pair parents only when each role has one known candidate.
         if len(fathers) == 1 and len(mothers) == 1:
             tree.add_trio(
                 next(iter(fathers)),
@@ -173,17 +182,23 @@ def rebuild_relationships(checkpoint, tree, ids):
                 child,
             )
         else:
+            # Multiple candidates cannot be paired without evidence.
             for father in sorted(fathers):
                 tree.add_trio(father, None, child)
 
             for mother in sorted(mothers):
                 tree.add_trio(None, mother, child)
 
+
+def _rebuild_couples(tree, couple_links):
+    """Restore couples and their marriage references"""
     for first, second, relationship_id in couple_links.values():
         if (first, second) in tree.fam:
             pair = (first, second)
+
         elif (second, first) in tree.fam:
             pair = (second, first)
+
         else:
             pair = (first, second)
             tree.add_fam(*pair)
@@ -193,3 +208,20 @@ def rebuild_relationships(checkpoint, tree, ids):
 
         if relationship_id:
             tree.fam[pair].add_marriage(relationship_id)
+
+
+def rebuild_relationships(checkpoint, tree, ids):
+    """Rebuild family relationships across all loaded GEDCOM batches"""
+    parent_links, parent_child_edges, couple_links = _collect_relationships(
+        checkpoint,
+        tree,
+        ids,
+    )
+
+    _rebuild_parentage(
+        tree,
+        parent_links,
+        parent_child_edges,
+    )
+
+    _rebuild_couples(tree, couple_links)
