@@ -1,7 +1,7 @@
-"""Explore every FamilySearch person connected by parent, child or couple links.
+"""Explore FamilySearch relatives and export genealogy data.
 
-The crawl keeps an SQLite checkpoint so that it can resume without revisiting
-people already fetched. It deliberately imposes no *generation* boundaries.
+The crawl uses an SQLite checkpoint to resume without revisiting people
+already fetched. The full scope has no generation boundaries.
 """
 
 from __future__ import annotations
@@ -106,6 +106,7 @@ def crawl(
 
     if progress:
         limit = str(max_people) if max_people else translate(language, "unlimited")
+
         print(
             translate(
                 language,
@@ -144,6 +145,7 @@ def crawl(
 
         if document is None:
             document = session.get_url(key)
+
             if document is not None:
                 checkpoint.save_response(key, document)
 
@@ -151,6 +153,7 @@ def crawl(
             person.get("id") == fid for person in document.get("persons", [])
         ):
             checkpoint.fail(fid)
+
             print(
                 translate(
                     language,
@@ -169,11 +172,9 @@ def crawl(
 
         if families is None:
             families = session.get_url(families_key)
+
             if families is not None:
-                checkpoint.save_response(
-                    families_key,
-                    families,
-                )
+                checkpoint.save_response(families_key, families)
 
         discovered = related_people(document)
 
@@ -205,7 +206,7 @@ def crawl(
         print(
             translate(
                 language,
-                ("complete" if complete else "paused"),
+                "complete" if complete else "paused",
                 done=done,
                 pending=pending,
                 failed=failed,
@@ -272,10 +273,8 @@ def assemble(
             flush=True,
         )
 
-    # Rebuild relationships across all batches of loaded individuals.
     rebuild_relationships(checkpoint, tree, ids)
 
-    # Fetch additional notes and contributors.
     if not no_notes or not no_contributors:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = []
@@ -325,7 +324,6 @@ def assemble(
                         flush=True,
                     )
 
-    # Write the completed GEDCOM atomically.
     tree.reset_num()
 
     output = Path(output).expanduser()
@@ -354,25 +352,8 @@ def resolve_output_path(destination):
     return destination / "GetMyFamilyTree.ged"
 
 
-def main(argv=None):
-    argv = sys.argv[1:] if argv is None else list(argv)
-
-    if argv and argv[0] == "research":
-        from getmyfamilytree.research_cli import run as run_research
-
-        return run_research(argv[1:], Checkpoint)
-
-    # Read the language before constructing the translated argparse help.
-    language_parser = argparse.ArgumentParser(add_help=False)
-    language_parser.add_argument(
-        "--language",
-        "--lang",
-        choices=("auto", "en", "es"),
-        default="auto",
-    )
-
-    language_options, _ = language_parser.parse_known_args(argv)
-    language = resolve_language(language_options.language)
+def _build_parser(language):
+    """Create the translated command-line argument parser."""
 
     def tr(message, **values):
         return translate(language, message, **values)
@@ -410,12 +391,7 @@ def main(argv=None):
     )
     parser.add_argument(
         "--scope",
-        choices=(
-            "full",
-            "ancestors",
-            "descendants",
-            "family",
-        ),
+        choices=("full", "ancestors", "descendants", "family"),
         default="full",
         help=tr("help_scope"),
     )
@@ -485,12 +461,16 @@ def main(argv=None):
         help=tr("help_no_contributors"),
     )
 
-    args = parser.parse_args(argv)
+    return parser
 
-    if args.scope in (
-        "ancestors",
-        "descendants",
-    ):
+
+def _validate_arguments(parser, args, language):
+    """Reject incompatible scope options and invalid limits"""
+
+    def tr(message):
+        return translate(language, message)
+
+    if args.scope in ("ancestors", "descendants"):
         if (
             args.generations is None
             or args.generations < 0
@@ -508,106 +488,311 @@ def main(argv=None):
     if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
         parser.error(tr("error_invalid_limits"))
 
+
+def _parse_arguments(argv):
+    """Resolve the interface language and parse validated CLI options"""
+    language_parser = argparse.ArgumentParser(add_help=False)
+    language_parser.add_argument(
+        "--language",
+        "--lang",
+        choices=("auto", "en", "es"),
+        default="auto",
+    )
+
+    language_options, _ = language_parser.parse_known_args(argv)
+    language = resolve_language(language_options.language)
+
+    parser = _build_parser(language)
+    args = parser.parse_args(argv)
+    _validate_arguments(parser, args, language)
+
+    return parser, args, language
+
+
+def _forget_saved_login(parser, args, language):
+    """Remove stored FamilySearch credentials when explicitly requested"""
+    if args.remember_login:
+        parser.error(translate(language, "error_forget_conflict"))
+
     credentials = CredentialStore()
 
-    if args.forget_login:
-        if args.remember_login:
-            parser.error(tr("error_forget_conflict"))
-
-        try:
-            removed = credentials.clear()
-        except CredentialStoreError:
-            parser.exit(
-                2,
-                tr("error_forget_keyring") + "\n",
-            )
-
-        print(tr("saved_removed" if removed else "saved_not_found"))
-        return
-
-    if not args.output:
-        parser.error(
-            tr("error_report_requires_output")
-            if args.report_only
-            else tr("error_required")
+    try:
+        removed = credentials.clear()
+    except CredentialStoreError:
+        parser.exit(
+            2,
+            translate(language, "error_forget_keyring") + "\n",
         )
+
+    message = "saved_removed" if removed else "saved_not_found"
+    print(translate(language, message))
+
+
+def _resolve_paths(parser, args, language):
+    """Validate the requested export path and locate the SQLite checkpoint"""
+    if not args.output:
+        message = (
+            "error_report_requires_output" if args.report_only else "error_required"
+        )
+        parser.error(translate(language, message))
 
     try:
         output_path = resolve_output_path(args.output)
     except ValueError:
-        parser.error(tr("error_output_path"))
+        parser.error(translate(language, "error_output_path"))
 
     checkpoint_path = args.database or output_path.with_suffix(".sqlite")
+    return output_path, checkpoint_path
 
-    if args.report_only:
-        if not checkpoint_path.expanduser().is_file():
-            parser.error(
-                tr(
-                    "error_report_database_missing",
-                    path=checkpoint_path,
-                )
+
+def _run_report_only(args, parser, language, output_path, checkpoint_path):
+    """Generate review reports from existing cached genealogy data"""
+    if not checkpoint_path.expanduser().is_file():
+        parser.error(
+            translate(
+                language,
+                "error_report_database_missing",
+                path=checkpoint_path,
             )
+        )
 
-        report_checkpoint = Checkpoint(checkpoint_path)
+    checkpoint = Checkpoint(checkpoint_path)
 
-        try:
-            selected_ids = None
+    try:
+        selected_ids = None
 
-            if args.scope != "full":
-                origin = report_checkpoint.get_origin()
+        if args.scope != "full":
+            origin = checkpoint.get_origin()
 
-                if not origin:
-                    parser.error(tr("error_scope_origin"))
+            if not origin:
+                parser.error(translate(language, "error_scope_origin"))
 
-                scoped = crawl_scope(
-                    report_checkpoint,
-                    None,
-                    origin,
-                    scope=args.scope,
-                    generations=args.generations,
-                    distance=args.distance,
-                    max_people=args.max_people,
-                    progress=0,
-                    language=language,
-                )
-                selected_ids = scoped.ids
-
-            result = write_person_report(
-                report_checkpoint,
-                output_path,
+            scoped = crawl_scope(
+                checkpoint,
+                None,
+                origin,
+                scope=args.scope,
+                generations=args.generations,
+                distance=args.distance,
+                max_people=args.max_people,
+                progress=0,
                 language=language,
+            )
+            selected_ids = scoped.ids
+
+        result = write_person_report(
+            checkpoint,
+            output_path,
+            language=language,
+            selected_ids=selected_ids,
+        )
+
+        if args.csv:
+            export_reports(
+                checkpoint,
+                output_path,
                 selected_ids=selected_ids,
             )
 
-            if args.csv:
-                export_reports(
-                    report_checkpoint,
-                    output_path,
-                    selected_ids=selected_ids,
-                )
+    finally:
+        checkpoint.close()
 
-        finally:
-            report_checkpoint.close()
-
-        print(
-            tr(
-                "person_report_saved",
-                people=result["people"],
-                events=result["events"],
-                path=result["path"],
-            )
+    print(
+        translate(
+            language,
+            "person_report_saved",
+            people=result["people"],
+            events=result["events"],
+            path=result["path"],
         )
-        return
+    )
 
-    if not args.individual:
-        parser.error(tr("error_required"))
 
-    if not PERSON_ID.fullmatch(args.individual):
-        parser.error(tr("error_invalid_id"))
+def _authenticate(args, parser, language, credentials):
+    """Authenticate with FamilySearch, optionally using the system keyring"""
+    try:
+        saved_login = credentials.load()
+    except CredentialStoreError:
+        saved_login = None
+        print(
+            translate(language, "error_keyring"),
+            file=sys.stderr,
+        )
 
-    if args.max_people < 0 or args.rate_limit < 1 or args.progress_every < 0:
-        parser.error(tr("error_invalid_limits"))
+    using_saved_login = saved_login is not None
 
+    if saved_login:
+        username, password = saved_login
+        print(
+            translate(language, "saved_login_used"),
+            file=sys.stderr,
+        )
+    else:
+        username = input(translate(language, "username_prompt"))
+        password = getpass.getpass(translate(language, "password_prompt"))
+
+    session = Session(
+        username,
+        password,
+        rate_limit=args.rate_limit,
+        delay=0.2,
+    )
+
+    if not session.logged and using_saved_login:
+        print(
+            translate(language, "saved_login_rejected"),
+            file=sys.stderr,
+        )
+
+        username = input(translate(language, "username_prompt"))
+        password = getpass.getpass(translate(language, "password_prompt"))
+
+        session = Session(
+            username,
+            password,
+            rate_limit=args.rate_limit,
+            delay=0.2,
+        )
+
+    if not session.logged:
+        parser.exit(
+            2,
+            translate(language, "error_login") + "\n",
+        )
+
+    if args.remember_login or (
+        using_saved_login and saved_login != (username, password)
+    ):
+        try:
+            credentials.save(username, password)
+            print(
+                translate(language, "login_saved"),
+                file=sys.stderr,
+            )
+        except CredentialStoreError:
+            print(
+                translate(language, "login_save_failed"),
+                file=sys.stderr,
+            )
+
+    del password
+    return session
+
+
+def _export_with_session(checkpoint, session, args, output_path, language):
+    """Explore the requested scope and produce GEDCOM and review reports"""
+    print(
+        translate(
+            language,
+            "checkpoint",
+            path=checkpoint.path,
+        ),
+        file=sys.stderr,
+    )
+
+    scoped = crawl_scope(
+        checkpoint,
+        session,
+        args.individual,
+        scope=args.scope,
+        generations=args.generations,
+        distance=args.distance,
+        max_people=args.max_people,
+        progress=args.progress_every,
+        language=language,
+    )
+
+    if scoped.interrupted:
+        print(
+            "\n" + translate(language, "interrupted"),
+            file=sys.stderr,
+        )
+
+    print(
+        translate(
+            language,
+            "building",
+            done=len(scoped.ids),
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
+
+    people, families = assemble(
+        checkpoint,
+        session,
+        output_path,
+        no_notes=args.no_notes,
+        no_sources=args.no_sources,
+        no_memories=args.no_memories,
+        no_contributors=args.no_contributors,
+        selected_ids=scoped.ids,
+        language=language,
+    )
+
+    print(
+        translate(
+            language,
+            "gedcom_done",
+            path=output_path,
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
+
+    print(
+        translate(language, "report_building"),
+        file=sys.stderr,
+        flush=True,
+    )
+
+    report = write_person_report(
+        checkpoint,
+        output_path,
+        language=language,
+        selected_ids=scoped.ids,
+    )
+
+    if args.csv:
+        export_reports(
+            checkpoint,
+            output_path,
+            selected_ids=scoped.ids,
+        )
+
+    print(
+        translate(
+            language,
+            "person_report_saved",
+            people=report["people"],
+            events=report["events"],
+            path=report["path"],
+        ),
+        file=sys.stderr,
+    )
+
+    print(
+        translate(
+            language,
+            "saved_tree",
+            people=people,
+            families=families,
+            path=output_path,
+            pending=scoped.pending,
+            failed=scoped.failed,
+        ),
+        file=sys.stderr,
+    )
+
+    if not scoped.exhausted:
+        print(
+            translate(language, "resume"),
+            file=sys.stderr,
+        )
+
+
+def _run_export(args, parser, language, output_path, checkpoint_path):
+    """Open a checkpoint, authenticate and run a genealogy export"""
     checkpoint = Checkpoint(checkpoint_path)
 
     try:
@@ -622,182 +807,59 @@ def main(argv=None):
         checkpoint.seed([args.individual])
         checkpoint.retry_failed()
 
-        try:
-            saved_login = credentials.load()
-        except CredentialStoreError:
-            saved_login = None
-            print(
-                tr("error_keyring"),
-                file=sys.stderr,
-            )
+        credentials = CredentialStore()
+        session = _authenticate(args, parser, language, credentials)
 
-        using_saved_login = saved_login is not None
-
-        if saved_login:
-            username, password = saved_login
-            print(
-                tr("saved_login_used"),
-                file=sys.stderr,
-            )
-        else:
-            username = input(tr("username_prompt"))
-            password = getpass.getpass(tr("password_prompt"))
-
-        session = Session(
-            username,
-            password,
-            rate_limit=args.rate_limit,
-            delay=0.2,
-        )
-
-        if not session.logged and using_saved_login:
-            print(
-                tr("saved_login_rejected"),
-                file=sys.stderr,
-            )
-
-            username = input(tr("username_prompt"))
-            password = getpass.getpass(tr("password_prompt"))
-
-            session = Session(
-                username,
-                password,
-                rate_limit=args.rate_limit,
-                delay=0.2,
-            )
-
-        if not session.logged:
-            parser.exit(
-                2,
-                tr("error_login") + "\n",
-            )
-
-        if args.remember_login or (
-            using_saved_login and saved_login != (username, password)
-        ):
-            try:
-                credentials.save(username, password)
-                print(
-                    tr("login_saved"),
-                    file=sys.stderr,
-                )
-            except CredentialStoreError:
-                print(
-                    tr("login_save_failed"),
-                    file=sys.stderr,
-                )
-
-        del password
-
-        print(
-            tr(
-                "checkpoint",
-                path=checkpoint.path,
-            ),
-            file=sys.stderr,
-        )
-
-        scoped = crawl_scope(
+        _export_with_session(
             checkpoint,
             session,
-            args.individual,
-            scope=args.scope,
-            generations=args.generations,
-            distance=args.distance,
-            max_people=args.max_people,
-            progress=args.progress_every,
-            language=language,
-        )
-
-        if scoped.interrupted:
-            print(
-                "\n" + tr("interrupted"),
-                file=sys.stderr,
-            )
-
-        print(
-            tr(
-                "building",
-                done=len(scoped.ids),
-            ),
-            file=sys.stderr,
-            flush=True,
-        )
-
-        n, families = assemble(
-            checkpoint,
-            session,
+            args,
             output_path,
-            no_notes=args.no_notes,
-            no_sources=args.no_sources,
-            no_memories=args.no_memories,
-            no_contributors=args.no_contributors,
-            selected_ids=scoped.ids,
-            language=language,
+            language,
         )
-
-        print(
-            tr(
-                "gedcom_done",
-                path=output_path,
-            ),
-            file=sys.stderr,
-            flush=True,
-        )
-
-        print(
-            tr("report_building"),
-            file=sys.stderr,
-            flush=True,
-        )
-
-        report = write_person_report(
-            checkpoint,
-            output_path,
-            language=language,
-            selected_ids=scoped.ids,
-        )
-
-        if args.csv:
-            export_reports(
-                checkpoint,
-                output_path,
-                selected_ids=scoped.ids,
-            )
-
-        print(
-            tr(
-                "person_report_saved",
-                people=report["people"],
-                events=report["events"],
-                path=report["path"],
-            ),
-            file=sys.stderr,
-        )
-
-        pending = scoped.pending
-        failed = scoped.failed
-
-        print(
-            tr(
-                "saved_tree",
-                people=n,
-                families=families,
-                path=output_path,
-                pending=pending,
-                failed=failed,
-            ),
-            file=sys.stderr,
-        )
-
-        if not scoped.exhausted:
-            print(
-                tr("resume"),
-                file=sys.stderr,
-            )
 
     finally:
         checkpoint.close()
+
+
+def main(argv=None):
+    """Dispatch research, report-only and FamilySearch export commands"""
+    argv = sys.argv[1:] if argv is None else list(argv)
+
+    if argv and argv[0] == "research":
+        from getmyfamilytree.research_cli import run as run_research
+
+        return run_research(argv[1:], Checkpoint)
+
+    parser, args, language = _parse_arguments(argv)
+
+    if args.forget_login:
+        return _forget_saved_login(parser, args, language)
+
+    output_path, checkpoint_path = _resolve_paths(parser, args, language)
+
+    if args.report_only:
+        return _run_report_only(
+            args,
+            parser,
+            language,
+            output_path,
+            checkpoint_path,
+        )
+
+    if not args.individual:
+        parser.error(translate(language, "error_required"))
+
+    if not PERSON_ID.fullmatch(args.individual):
+        parser.error(translate(language, "error_invalid_id"))
+
+    return _run_export(
+        args,
+        parser,
+        language,
+        output_path,
+        checkpoint_path,
+    )
 
 
 if __name__ == "__main__":
