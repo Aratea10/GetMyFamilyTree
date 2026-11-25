@@ -226,7 +226,7 @@ def crawl(
 
 
 # Existing callers rely on this public signature.
-def assemble(
+def assemble(  # noqa: PLR0913
     checkpoint,
     session,
     output,
@@ -237,7 +237,7 @@ def assemble(
     no_contributors=False,
     selected_ids=None,
     language="en",
-):  # noqa: PLR0913
+):
     """Build a GEDCOM snapshot containing only the selected scope"""
     ids = checkpoint.completed_ids() if selected_ids is None else list(selected_ids)
 
