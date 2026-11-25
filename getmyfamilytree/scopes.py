@@ -421,7 +421,7 @@ class _ScopeTraversal:
 
 
 # Existing callers rely on these public scope options.
-def crawl_scope(
+def crawl_scope(  # noqa: PLR0913
     checkpoint,
     session,
     origin,
@@ -432,7 +432,7 @@ def crawl_scope(
     max_people=1000,
     progress=1,
     language="en",
-):  # noqa: PLR0913
+):
     """Traverse one scope, returning exactly the downloaded members of it.
 
     session=None performs an offline selection from cached records only. The
