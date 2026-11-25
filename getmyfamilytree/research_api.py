@@ -6,6 +6,8 @@ new data. It does not serve arbitrary local files or allow browser CORS.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 import secrets
@@ -13,10 +15,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+from getmyfamilytree.research_assets import ASSET_ID
 from getmyfamilytree.research_workspace import ResearchWorkspace, TaskQuery
 from getmyfamilytree.scopes import PERSON_ID
 
 MAX_REQUEST_BYTES = 1024 * 1024
+MAX_ASSET_REQUEST_BYTES = 29 * 1024 * 1024
 CARD_ID = re.compile(r"[0-9a-f]{32}\Z")
 
 
@@ -78,6 +82,17 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
         if encoded:
             self.wfile.write(encoded)
 
+    def _respond_asset(self, payload, media_type):
+        """Serve only imported attachments, never arbitrary local files."""
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", media_type)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "sandbox")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
     def _authorized(self):
         value = self.headers.get("Authorization", "")
         prefix = "Bearer "
@@ -94,7 +109,12 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError as error:
             raise ValueError("Invalid Content-Length") from error
-        if length < 1 or length > MAX_REQUEST_BYTES:
+        limit = (
+            MAX_ASSET_REQUEST_BYTES
+            if urlsplit(self.path).path == "/api/v1/assets"
+            else MAX_REQUEST_BYTES
+        )
+        if length < 1 or length > limit:
             raise ValueError("JSON body has an invalid size")
 
         try:
@@ -113,6 +133,10 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             return workspace.list_tasks(_query_options(parameters))
         if parts == ["cards"]:
             return {"items": workspace.list_cards()}
+        if parts == ["assets"]:
+            return {"items": workspace.assets.list()}
+        if len(parts) == 2 and parts[0] == "assets":
+            return workspace.assets.get(parts[1])
         if len(parts) == 2 and parts[0] == "cards":
             return workspace.get_card(_card_id(parts[1]))
         if len(parts) == 2 and parts[0] == "people":
@@ -141,8 +165,29 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
 
         return self.server.workspace.person_detail(identifier)["task"]
 
+    def _write_asset(self, method, parts, payload):
+        """Import or remove an attachment with strict input validation."""
+        assets = self.server.workspace.assets
+        if method == "POST" and parts == ["assets"]:
+            if set(payload) != {"name", "content_base64"}:
+                raise ValueError("Expected name and content_base64")
+            if not isinstance(payload["content_base64"], str):
+                raise ValueError("Attachment content must be base64 text")
+            try:
+                data = base64.b64decode(payload["content_base64"], validate=True)
+            except (ValueError, binascii.Error) as error:
+                raise ValueError("Invalid base64 attachment") from error
+            return HTTPStatus.CREATED, assets.import_bytes(payload["name"], data)
+        if method == "DELETE" and len(parts) == 2 and parts[0] == "assets":
+            assets.delete(parts[1])
+            return HTTPStatus.NO_CONTENT, None
+        raise KeyError("Unknown route")
+
     def _write(self, method, parts, payload):
         workspace = self.server.workspace
+
+        if parts and parts[0] == "assets":
+            return self._write_asset(method, parts, payload)
 
         if method == "POST" and parts == ["cards"]:
             if set(payload) - {"card", "people"}:
@@ -187,6 +232,15 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
 
         parts = parsed.path[len("/api/v1/"):].split("/")
         try:
+            if (
+                method == "GET"
+                and len(parts) == 3
+                and parts[0] == "assets"
+                and parts[2] == "content"
+            ):
+                data, media_type = self.server.workspace.assets.read(parts[1])
+                self._respond_asset(data, media_type)
+                return
             if method == "GET":
                 parameters = parse_qs(parsed.query, keep_blank_values=True)
                 response = self._get(parts, parameters)
