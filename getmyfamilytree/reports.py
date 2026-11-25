@@ -464,7 +464,6 @@ def _collect_person(checkpoint, person_id, data, relations, names):
                     relations[key] = relationship
 
 
-
 def _filter_relationships(relations, selected_ids):
     """Exclude links to people outside the requested scope."""
     if selected_ids is None:
@@ -574,7 +573,6 @@ def _collect_couple_details(checkpoint, relations, names, sources, notes):
         )
         for entity in note_response.get("relationships") or []:
             _read_notes(entity, "couple", key, source_owner_name, notes)
-
 
 
 def collect_reports(checkpoint, selected_ids=None):
