@@ -254,24 +254,8 @@ def _source_ref_id(value):
     return value.rsplit("#", 1)[-1] if "#" in value else value
 
 
-def _owner_sources(
-    checkpoint,
-    owner_type,
-    owner_id,
-    owner_name,
-    source_refs,
-    source_endpoint,
-    rows,
-    notes,
-):
-    """Include every owner reference, even when its source details are missing."""
-    response = _cached_response(checkpoint, source_endpoint)
-    descriptions = {
-        _source_ref_id(source.get("id")): source
-        for source in response.get("sourceDescriptions") or []
-        if isinstance(source, dict)
-    }
-
+def _collect_source_refs(source_refs, response):
+    """Gather source references from both the owner and cached response."""
     refs = {}
     for item in source_refs or []:
         if not isinstance(item, dict):
@@ -288,6 +272,21 @@ def _owner_sources(
                 if ref:
                     refs.setdefault(_source_ref_id(ref), []).append(item)
 
+    return refs
+
+
+def _owner_sources(checkpoint, owner, source_refs, source_endpoint, outputs):
+    """Include every owner reference, even when its source details are missing."""
+    owner_type, owner_id, owner_name = owner
+    rows, notes = outputs
+    response = _cached_response(checkpoint, source_endpoint)
+    descriptions = {
+        _source_ref_id(source.get("id")): source
+        for source in response.get("sourceDescriptions") or []
+        if isinstance(source, dict)
+    }
+
+    refs = _collect_source_refs(source_refs, response)
     for source_id in descriptions:
         refs.setdefault(source_id, [])
     for source_id, references in refs.items():
@@ -389,119 +388,107 @@ def _review_rows(path):
         }
 
 
-def collect_reports(checkpoint, selected_ids=None):
-    """Collect cached genealogy for the selected people only."""
-    people = []
-    events = []
-    relations = {}
-    names = {}
-    sources = []
-    notes = []
-    memories = []
-
-    for person_id in (
-        checkpoint.completed_ids() if selected_ids is None else selected_ids
-    ):
-        document = checkpoint.get_response(PERSON_URL + person_id) or {}
-        person = next(
-            (p for p in document.get("persons") or [] if p.get("id") == person_id),
-            None,
-        )
-        if not person:
-            continue
-        name = _name(person)
-        names[person_id] = name
-        facts = person.get("facts") or []
-        gender = (person.get("gender") or {}).get("type", "").rsplit("/", 1)[-1]
-        people.append(
+def _collect_person(checkpoint, person_id, data, relations, names):
+    """Collect one person's cached records without network calls."""
+    people = data["people"]
+    events = data["events"]
+    sources = data["sources"]
+    notes = data["notes"]
+    memories = data["memories"]
+    document = checkpoint.get_response(PERSON_URL + person_id) or {}
+    person = next(
+        (p for p in document.get("persons") or [] if p.get("id") == person_id),
+        None,
+    )
+    if not person:
+        return
+    name = _name(person)
+    names[person_id] = name
+    facts = person.get("facts") or []
+    gender = (person.get("gender") or {}).get("type", "").rsplit("/", 1)[-1]
+    people.append(
+        {
+            "person_id": person_id,
+            "name": name,
+            "gender": gender,
+            "living": person.get("living", ""),
+            "events": len(facts),
+            "familysearch_url": f"https://www.familysearch.org/tree/person/details/{person_id}",
+        }
+    )
+    person_notes = _cached_response(
+        checkpoint, f"/platform/tree/persons/{person_id}/notes"
+    )
+    for entity in person_notes.get("persons") or []:
+        _read_notes(entity, "person", person_id, name, notes)
+    _owner_sources(
+        checkpoint,
+        ("person", person_id, name),
+        person.get("sources"),
+        f"/platform/tree/persons/{person_id}/sources",
+        (sources, notes),
+    )
+    _memory_rows(checkpoint, person_id, name, person, memories)
+    seen = {}
+    for fact in facts:
+        digest = json.dumps(fact, sort_keys=True, ensure_ascii=False)
+        seen[digest] = seen.get(digest, 0) + 1
+        date = fact.get("date")
+        year, date_status = year_for_sorting(date)
+        original, formal, _ = _date_parts(date)
+        events.append(
             {
+                "event_key": _event_key(person_id, fact, seen[digest]),
+                "year": year,
+                "date_status": date_status,
                 "person_id": person_id,
-                "name": name,
-                "gender": gender,
-                "living": person.get("living", ""),
-                "events": len(facts),
+                "person_name": name,
+                "event_type": _text(fact.get("type")).rsplit("/", 1)[-1],
+                "date_original": original,
+                "date_formal": formal,
+                "place": _place(fact),
+                "value": _text(fact.get("value")),
+                "source_references": _source_refs(fact),
                 "familysearch_url": f"https://www.familysearch.org/tree/person/details/{person_id}",
             }
         )
-        person_notes = _cached_response(
-            checkpoint, f"/platform/tree/persons/{person_id}/notes"
-        )
-        for entity in person_notes.get("persons") or []:
-            _read_notes(entity, "person", person_id, name, notes)
-        _owner_sources(
-            checkpoint,
-            "person",
-            person_id,
-            name,
-            person.get("sources"),
-            f"/platform/tree/persons/{person_id}/sources",
-            sources,
-            notes,
-        )
-        _memory_rows(checkpoint, person_id, name, person, memories)
-        seen = {}
-        for fact in facts:
-            digest = json.dumps(fact, sort_keys=True, ensure_ascii=False)
-            seen[digest] = seen.get(digest, 0) + 1
-            date = fact.get("date")
-            year, date_status = year_for_sorting(date)
-            original, formal, _ = _date_parts(date)
-            events.append(
-                {
-                    "event_key": _event_key(person_id, fact, seen[digest]),
-                    "year": year,
-                    "date_status": date_status,
-                    "person_id": person_id,
-                    "person_name": name,
-                    "event_type": _text(fact.get("type")).rsplit("/", 1)[-1],
-                    "date_original": original,
-                    "date_formal": formal,
-                    "place": _place(fact),
-                    "value": _text(fact.get("value")),
-                    "source_references": _source_refs(fact),
-                    "familysearch_url": f"https://www.familysearch.org/tree/person/details/{person_id}",
-                }
+    for document_part in (
+        document,
+        checkpoint.get_response(FAMILIES_URL.format(person_id)) or {},
+    ):
+        for category in ("relationships", "childAndParentsRelationships"):
+            for relationship in document_part.get(category) or []:
+                key = _relationship_key(relationship)
+                # Keep the fullest available representation of the link.
+                if key not in relations or len(relationship) > len(relations[key]):
+                    relations[key] = relationship
+
+
+
+def _filter_relationships(relations, selected_ids):
+    """Exclude links to people outside the requested scope."""
+    if selected_ids is None:
+        return relations
+
+    chosen = set(selected_ids)
+    relations = {
+        key: relationship
+        for key, relationship in relations.items()
+        if all(
+            identifier in chosen
+            for identifier in (
+                _member(relationship, field)
+                for field in ("person1", "person2", "parent1", "parent2", "child")
             )
-        for document_part in (
-            document,
-            checkpoint.get_response(FAMILIES_URL.format(person_id)) or {},
-        ):
-            for category in ("relationships", "childAndParentsRelationships"):
-                for relationship in document_part.get(category) or []:
-                    key = _relationship_key(relationship)
-                    # Keep the fullest available representation of the link.
-                    if key not in relations or len(relationship) > len(relations[key]):
-                        relations[key] = relationship
-
-    people.sort(key=lambda item: (item["name"].casefold(), item["person_id"]))
-    events.sort(
-        key=lambda item: (
-            item["year"] == "",
-            int(item["year"]) if item["year"] else 0,
-            item["person_name"].casefold(),
-            item["event_type"],
-            item["event_key"],
+            if identifier
         )
-    )
+    }
 
-    # A bounded scope should not list unselected people as if they had
-    # been downloaded. Only keep relationships whose known endpoints are
-    # all within the requested person set.
-    if selected_ids is not None:
-        chosen = set(selected_ids)
-        relations = {
-            key: relationship
-            for key, relationship in relations.items()
-            if all(
-                identifier in chosen
-                for identifier in (
-                    _member(relationship, field)
-                    for field in ("person1", "person2", "parent1", "parent2", "child")
-                )
-                if identifier
-            )
-        }
+    return relations
 
+
+def _relationship_rows(relations, names):
+    """Format relationships for the reports."""
     relationships = []
     for key, relationship in relations.items():
         first = _member(relationship, "person1")
@@ -548,6 +535,11 @@ def collect_reports(checkpoint, selected_ids=None):
             item["relationship_key"],
         )
     )
+    return relationships
+
+
+def _collect_couple_details(checkpoint, relations, names, sources, notes):
+    """Append couple-owned cached sources and notes."""
     for key, relation in relations.items():
         if relation.get("type") != "http://gedcomx.org/Couple":
             continue
@@ -572,19 +564,57 @@ def collect_reports(checkpoint, selected_ids=None):
             source_refs = relationship_data["sources"]
         _owner_sources(
             checkpoint,
-            "couple",
-            key,
-            source_owner_name,
+            ("couple", key, source_owner_name),
             source_refs,
             f"/platform/tree/couple-relationships/{key}/sources",
-            sources,
-            notes,
+            (sources, notes),
         )
         note_response = _cached_response(
             checkpoint, f"/platform/tree/couple-relationships/{key}/notes"
         )
         for entity in note_response.get("relationships") or []:
             _read_notes(entity, "couple", key, source_owner_name, notes)
+
+
+
+def collect_reports(checkpoint, selected_ids=None):
+    """Collect cached genealogy for the selected people only."""
+    data = {
+        "people": [],
+        "events": [],
+        "relationships": [],
+        "sources": [],
+        "notes": [],
+        "memories": [],
+    }
+    relations = {}
+    names = {}
+
+    for person_id in (
+        checkpoint.completed_ids() if selected_ids is None else selected_ids
+    ):
+        _collect_person(checkpoint, person_id, data, relations, names)
+
+    people = data["people"]
+    events = data["events"]
+    people.sort(key=lambda item: (item["name"].casefold(), item["person_id"]))
+    events.sort(
+        key=lambda item: (
+            item["year"] == "",
+            int(item["year"]) if item["year"] else 0,
+            item["person_name"].casefold(),
+            item["event_type"],
+            item["event_key"],
+        )
+    )
+
+    relations = _filter_relationships(relations, selected_ids)
+    data["relationships"] = _relationship_rows(relations, names)
+
+    sources = data["sources"]
+    notes = data["notes"]
+    memories = data["memories"]
+    _collect_couple_details(checkpoint, relations, names, sources, notes)
 
     sources.sort(
         key=lambda row: (
@@ -607,14 +637,7 @@ def collect_reports(checkpoint, selected_ids=None):
         )
     )
 
-    return {
-        "people": people,
-        "events": events,
-        "relationships": relationships,
-        "sources": sources,
-        "notes": notes,
-        "memories": memories,
-    }
+    return data
 
 
 def export_reports(checkpoint, output, selected_ids=None):
