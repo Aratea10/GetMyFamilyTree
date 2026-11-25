@@ -226,85 +226,115 @@ class _PersonReportRenderer:
             lines.append(f"**{'Vive' if es else 'Living'}:** {_md(person['living'])}")
 
 
+    def _couple_lines(self, relation, fid):
+        """Show a couple link and its attached source and note records."""
+        es = self.es
+        first = relation["person1_id"]
+        second = relation["person2_id"]
+        other = second if fid == first else first
+        lines = [
+            "- "
+            + ("Pareja" if es else "Partner")
+            + ": "
+            + self._relative(other)
+            + f" — `{_md(relation['relationship_key'])}`"
+        ]
+
+        for source in self.sources:
+            if (
+                source["owner_type"] == "couple"
+                and source["owner_id"] == relation["relationship_key"]
+            ):
+                lines.append(
+                    "  - "
+                    + ("Fuente de la pareja" if es else "Couple source")
+                    + ": "
+                    + _md(source["title"] or source["source_id"])
+                    + (
+                        f" — {_md(source['citation'])}"
+                        if source["citation"]
+                        else ""
+                    )
+                    + (
+                        f" — {_link(source['url'], 'Abrir' if es else 'Open')}"
+                        if source["url"]
+                        else ""
+                    )
+                )
+
+        for note in self.notes:
+            if (
+                note["owner_type"] == "couple"
+                and note["owner_id"] == relation["relationship_key"]
+            ):
+                lines.append(
+                    "  - "
+                    + ("Nota de la pareja" if es else "Couple note")
+                    + ": "
+                    + _md(note["text"])
+                )
+
+        return lines
+
+    def _parentage_lines(self, relation, fid):
+        """Show a child's parents or a parent's child."""
+        es = self.es
+        parent1 = relation["parent1_id"]
+        parent2 = relation["parent2_id"]
+        child = relation["child_id"]
+        lines = []
+
+        if fid == child:
+            for number, parent in enumerate((parent1, parent2), 1):
+                if parent:
+                    lines.append(
+                        f"- {'Progenitor' if es else 'Parent'} {number}: "
+                        + self._relative(parent)
+                    )
+        elif fid in (parent1, parent2):
+            lines.append(
+                "- " + ("Hijo/a" if es else "Child") + ": " + self._relative(child)
+            )
+
+        return lines
+
+    def _direct_parent_lines(self, relation, fid):
+        """Show a directed ParentChild relationship."""
+        es = self.es
+        first = relation["person1_id"]
+        second = relation["person2_id"]
+
+        if fid == first and second:
+            return [
+                "- " + ("Hijo/a" if es else "Child") + ": " + self._relative(second)
+            ]
+
+        if fid == second and first:
+            return [
+                "- " + ("Progenitor" if es else "Parent") + ": " + self._relative(first)
+            ]
+
+        return []
+
     def _render_relationships(self, lines, person):
-        """Render the relationships section for one person."""
+        """Render all verified cached links for one person."""
         fid = person["person_id"]
         es = self.es
-        relative = self._relative
-        relationships = self.relationships
-        sources = self.sources
-        notes = self.notes
         lines.extend(["", "#### " + ("Parentescos" if es else "Relationships"), ""])
+
         rel_lines = []
-        for relation in relationships:
+        for relation in self.relationships:
             kind = relation["relationship_type"]
-            first, second = relation["person1_id"], relation["person2_id"]
-            parent1, parent2 = relation["parent1_id"], relation["parent2_id"]
-            child = relation["child_id"]
-            if kind == "Couple" and fid in (first, second):
-                other = second if fid == first else first
-                rel_lines.append(
-                    "- "
-                    + ("Pareja" if es else "Partner")
-                    + ": "
-                    + relative(other)
-                    + f" — `{_md(relation['relationship_key'])}`"
-                )
-                for source in sources:
-                    if (
-                        source["owner_type"] == "couple"
-                        and source["owner_id"] == relation["relationship_key"]
-                    ):
-                        rel_lines.append(
-                            "  - "
-                            + ("Fuente de la pareja" if es else "Couple source")
-                            + ": "
-                            + _md(source["title"] or source["source_id"])
-                            + (
-                                f" — {_md(source['citation'])}"
-                                if source["citation"]
-                                else ""
-                            )
-                            + (
-                                f" — {_link(source['url'], 'Abrir' if es else 'Open')}"
-                                if source["url"]
-                                else ""
-                            )
-                        )
-                for note in notes:
-                    if (
-                        note["owner_type"] == "couple"
-                        and note["owner_id"] == relation["relationship_key"]
-                    ):
-                        rel_lines.append(
-                            "  - "
-                            + ("Nota de la pareja" if es else "Couple note")
-                            + ": "
-                            + _md(note["text"])
-                        )
-            elif child and kind == "ChildAndParents":
-                if fid == child:
-                    for number, parent in enumerate((parent1, parent2), 1):
-                        if parent:
-                            rel_lines.append(
-                                f"- {'Progenitor' if es else 'Parent'} {number}: {relative(parent)}"
-                            )
-                elif fid in (parent1, parent2):
-                    rel_lines.append(
-                        "- " + ("Hijo/a" if es else "Child") + ": " + relative(child)
-                    )
+            if kind == "Couple" and fid in (
+                relation["person1_id"],
+                relation["person2_id"],
+            ):
+                rel_lines.extend(self._couple_lines(relation, fid))
+            elif kind == "ChildAndParents" and relation["child_id"]:
+                rel_lines.extend(self._parentage_lines(relation, fid))
             elif kind == "ParentChild":
-                if fid == first and second:
-                    rel_lines.append(
-                        "- " + ("Hijo/a" if es else "Child") + ": " + relative(second)
-                    )
-                elif fid == second and first:
-                    rel_lines.append(
-                        "- "
-                        + ("Progenitor" if es else "Parent")
-                        + ": "
-                        + relative(first)
-                    )
+                rel_lines.extend(self._direct_parent_lines(relation, fid))
+
         lines.extend(
             sorted(set(rel_lines))
             or [
@@ -312,7 +342,6 @@ class _PersonReportRenderer:
                 + ("Sin vínculos recuperados." if es else "No cached relationships.")
             ]
         )
-
 
     def _render_events(self, lines, person):
         """Render the events section for one person."""
