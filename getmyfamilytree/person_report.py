@@ -110,10 +110,7 @@ class _PersonReportRenderer:
         for memory in self.memories:
             self.memory_by_person[memory["person_id"]].append(memory)
 
-        self.people_by_id = {
-            person["person_id"]: person
-            for person in self.people
-        }
+        self.people_by_id = {person["person_id"]: person for person in self.people}
 
     def _name_for(self, identifier):
         return self.people_by_id.get(identifier, {}).get("name") or identifier
@@ -139,7 +136,8 @@ class _PersonReportRenderer:
         es = self.es
         language = self.language
         lines = [
-            "# GetMyFamilyTree — " + ("Revisión genealógica" if es else "Genealogy review"),
+            "# GetMyFamilyTree — "
+            + ("Revisión genealógica" if es else "Genealogy review"),
             "",
             (
                 "> Informe generado a partir del progreso guardado. No modifica el GEDCOM. "
@@ -225,7 +223,6 @@ class _PersonReportRenderer:
         if person["living"] != "":
             lines.append(f"**{'Vive' if es else 'Living'}:** {_md(person['living'])}")
 
-
     def _couple_lines(self, relation, fid):
         """Show a couple link and its attached source and note records."""
         es = self.es
@@ -250,11 +247,7 @@ class _PersonReportRenderer:
                     + ("Fuente de la pareja" if es else "Couple source")
                     + ": "
                     + _md(source["title"] or source["source_id"])
-                    + (
-                        f" — {_md(source['citation'])}"
-                        if source["citation"]
-                        else ""
-                    )
+                    + (f" — {_md(source['citation'])}" if source["citation"] else "")
                     + (
                         f" — {_link(source['url'], 'Abrir' if es else 'Open')}"
                         if source["url"]
@@ -402,7 +395,6 @@ class _PersonReportRenderer:
                 + ("Sin acontecimientos recuperados." if es else "No cached events.")
             )
 
-
     def _render_sources(self, lines, person):
         """Render the sources section for one person."""
         fid = person["person_id"]
@@ -448,7 +440,6 @@ class _PersonReportRenderer:
                 "- " + ("No hay fuentes recuperadas." if es else "No cached sources.")
             )
 
-
     def _render_notes(self, lines, person):
         """Render the notes section for one person."""
         fid = person["person_id"]
@@ -466,7 +457,6 @@ class _PersonReportRenderer:
             lines.append(
                 "- " + ("No hay notas recuperadas." if es else "No cached notes.")
             )
-
 
     def _render_memories(self, lines, person):
         """Render the memories section for one person."""
@@ -493,7 +483,6 @@ class _PersonReportRenderer:
                 "- "
                 + ("No hay recuerdos recuperados." if es else "No cached memories.")
             )
-
 
     def _render_review(self, lines, person):
         """Render the review section for one person."""
@@ -539,7 +528,6 @@ class _PersonReportRenderer:
             self._render_review(lines, person)
 
         return lines
-
 
 
 def write_person_report(checkpoint, output, language="en", selected_ids=None):
