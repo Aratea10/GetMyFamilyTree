@@ -80,129 +80,135 @@ def _event_checklist(events, existing, language):
     return "\n".join(part for part in (previous, *items) if part)
 
 
-def write_person_report(checkpoint, output, language="en", selected_ids=None):
-    """Write a single Markdown report; return its path and record counts."""
-    output = Path(output).expanduser()
-    report = output.with_suffix(".md")
-    report.parent.mkdir(parents=True, exist_ok=True)
-    # Capture hand-written checks before replacing the Markdown file. This
-    # remains safe even when the next scope omits the people being reviewed.
-    written_reviews = _saved_reviews(report)
-    if written_reviews:
-        checkpoint.save_review_notes(written_reviews)
-    saved = checkpoint.load_review_notes()
-    data = collect_reports(checkpoint, selected_ids=selected_ids)
-    es = language == "es"
+class _PersonReportRenderer:
+    """Render cached genealogy while retaining manual review entries."""
 
-    people = data["people"]
-    events = data["events"]
-    relationships = data["relationships"]
-    sources = data["sources"]
-    notes = data["notes"]
-    memories = data["memories"]
+    def __init__(self, data, language, saved):
+        self.language = language
+        self.es = language == "es"
+        self.saved = saved
+        self.people = data["people"]
+        self.events = data["events"]
+        self.relationships = data["relationships"]
+        self.sources = data["sources"]
+        self.notes = data["notes"]
+        self.memories = data["memories"]
 
-    event_by_person = defaultdict(list)
-    source_by_person = defaultdict(list)
-    note_by_person = defaultdict(list)
-    memory_by_person = defaultdict(list)
-    for event in events:
-        event_by_person[event["person_id"]].append(event)
-    for source in sources:
-        if source["owner_type"] == "person":
-            source_by_person[source["owner_id"]].append(source)
-    for note in notes:
-        if note["owner_type"] == "person":
-            note_by_person[note["owner_id"]].append(note)
-    for memory in memories:
-        memory_by_person[memory["person_id"]].append(memory)
+        self.event_by_person = defaultdict(list)
+        self.source_by_person = defaultdict(list)
+        self.note_by_person = defaultdict(list)
+        self.memory_by_person = defaultdict(list)
 
-    people_by_id = {person["person_id"]: person for person in people}
+        for event in self.events:
+            self.event_by_person[event["person_id"]].append(event)
+        for source in self.sources:
+            if source["owner_type"] == "person":
+                self.source_by_person[source["owner_id"]].append(source)
+        for note in self.notes:
+            if note["owner_type"] == "person":
+                self.note_by_person[note["owner_id"]].append(note)
+        for memory in self.memories:
+            self.memory_by_person[memory["person_id"]].append(memory)
 
-    def name_for(identifier):
-        return people_by_id.get(identifier, {}).get("name") or identifier
+        self.people_by_id = {
+            person["person_id"]: person
+            for person in self.people
+        }
 
-    def relative(identifier):
-        return f"{_md(name_for(identifier))} (`{_md(identifier)}`)"
+    def _name_for(self, identifier):
+        return self.people_by_id.get(identifier, {}).get("name") or identifier
 
-    def birth_year(person):
+    def _relative(self, identifier):
+        return f"{_md(self._name_for(identifier))} (`{_md(identifier)}`)"
+
+    def _birth_year(self, person):
         years = [
             int(event["year"])
-            for event in event_by_person[person["person_id"]]
+            for event in self.event_by_person[person["person_id"]]
             if event["event_type"] == "Birth" and event["year"]
         ]
         return min(years) if years else 99999
 
-    people = sorted(
-        people, key=lambda p: (birth_year(p), p["name"].casefold(), p["person_id"])
-    )
-    lines = [
-        "# GetMyFamilyTree — " + ("Revisión genealógica" if es else "Genealogy review"),
-        "",
-        (
-            "> Informe generado a partir del progreso guardado. No modifica el GEDCOM. "
-            "Los datos y las fuentes no equivalen a una verificación documental."
-            if es
-            else "> Generated from cached research data. The GEDCOM is unchanged. "
-            "The records and sources are not themselves independent verification."
-        ),
-        "",
-        f"**{'Personas' if es else 'People'}:** {len(people)} · "
-        f"**{'Acontecimientos' if es else 'Events'}:** {len(events)} · "
-        f"**{'Fuentes' if es else 'Sources'}:** {len(sources)} · "
-        f"**{'Notas' if es else 'Notes'}:** {len(notes)} · "
-        f"**{'Recuerdos' if es else 'Memories'}:** {len(memories)}",
-        "",
-        "## " + ("Índice cronológico" if es else "Chronological index"),
-        "",
-        (
-            "Los años dudosos son solo referencias para ordenar. "
-            "La fecha original se mantiene en cada ficha."
-            if es
-            else "Uncertain years are only sorting references. "
-            "Each person's original dates are retained."
-        ),
-        "",
-        "| "
-        + (
-            "Año | Acontecimiento | Persona | Fecha original |"
-            if es
-            else "Year | Event | Person | Original date |"
-        ),
-        "| --- | --- | --- | --- |",
-    ]
-
-    for event in events:
-        label = _label(event["event_type"], language)
-        fid = event["person_id"]
-        year = event["year"] or "—"
-        lines.append(
-            f"| {_md(year)} | {_md(label)} | "
-            f"[{_md(event['person_name'])}](#persona-{fid.lower()}) | "
-            f"{_md(event['date_original'])} |"
-        )
-
-    lines.extend(
-        [
-            "",
-            "## " + ("Fichas por persona" if es else "Person records"),
+    def _start_lines(self):
+        """Render report introduction, chronological table and section header."""
+        people = self.people
+        events = self.events
+        sources = self.sources
+        notes = self.notes
+        memories = self.memories
+        es = self.es
+        language = self.language
+        lines = [
+            "# GetMyFamilyTree — " + ("Revisión genealógica" if es else "Genealogy review"),
             "",
             (
-                "Las fichas se ordenan por el año de nacimiento disponible. "
-                "Sin año de nacimiento, se muestran al final. "
-                "Escribe tus comprobaciones únicamente dentro de cada bloque "
-                "«Mi revisión»; ese contenido se conserva al regenerar el archivo."
+                "> Informe generado a partir del progreso guardado. No modifica el GEDCOM. "
+                "Los datos y las fuentes no equivalen a una verificación documental."
                 if es
-                else "People are ordered by their available birth year, with undated "
-                "people last. Write your own notes only inside each 'My review' "
-                "block: those sections are preserved when regenerating the file."
+                else "> Generated from cached research data. The GEDCOM is unchanged. "
+                "The records and sources are not themselves independent verification."
             ),
             "",
+            f"**{'Personas' if es else 'People'}:** {len(people)} · "
+            f"**{'Acontecimientos' if es else 'Events'}:** {len(events)} · "
+            f"**{'Fuentes' if es else 'Sources'}:** {len(sources)} · "
+            f"**{'Notas' if es else 'Notes'}:** {len(notes)} · "
+            f"**{'Recuerdos' if es else 'Memories'}:** {len(memories)}",
+            "",
+            "## " + ("Índice cronológico" if es else "Chronological index"),
+            "",
+            (
+                "Los años dudosos son solo referencias para ordenar. "
+                "La fecha original se mantiene en cada ficha."
+                if es
+                else "Uncertain years are only sorting references. "
+                "Each person's original dates are retained."
+            ),
+            "",
+            "| "
+            + (
+                "Año | Acontecimiento | Persona | Fecha original |"
+                if es
+                else "Year | Event | Person | Original date |"
+            ),
+            "| --- | --- | --- | --- |",
         ]
-    )
 
-    for person in people:
+        for event in events:
+            label = _label(event["event_type"], language)
+            fid = event["person_id"]
+            year = event["year"] or "—"
+            lines.append(
+                f"| {_md(year)} | {_md(label)} | "
+                f"[{_md(event['person_name'])}](#persona-{fid.lower()}) | "
+                f"{_md(event['date_original'])} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "## " + ("Fichas por persona" if es else "Person records"),
+                "",
+                (
+                    "Las fichas se ordenan por el año de nacimiento disponible. "
+                    "Sin año de nacimiento, se muestran al final. "
+                    "Escribe tus comprobaciones únicamente dentro de cada bloque "
+                    "«Mi revisión»; ese contenido se conserva al regenerar el archivo."
+                    if es
+                    else "People are ordered by their available birth year, with undated "
+                    "people last. Write your own notes only inside each 'My review' "
+                    "block: those sections are preserved when regenerating the file."
+                ),
+                "",
+            ]
+        )
+
+        return lines
+
+    def _render_intro(self, lines, person):
+        """Render the intro section for one person."""
         fid = person["person_id"]
-        events_here = event_by_person[fid]
+        es = self.es
         lines.extend(
             [
                 f'<a id="persona-{fid.lower()}"></a>',
@@ -219,6 +225,15 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
         if person["living"] != "":
             lines.append(f"**{'Vive' if es else 'Living'}:** {_md(person['living'])}")
 
+
+    def _render_relationships(self, lines, person):
+        """Render the relationships section for one person."""
+        fid = person["person_id"]
+        es = self.es
+        relative = self._relative
+        relationships = self.relationships
+        sources = self.sources
+        notes = self.notes
         lines.extend(["", "#### " + ("Parentescos" if es else "Relationships"), ""])
         rel_lines = []
         for relation in relationships:
@@ -298,6 +313,13 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
             ]
         )
 
+
+    def _render_events(self, lines, person):
+        """Render the events section for one person."""
+        fid = person["person_id"]
+        es = self.es
+        language = self.language
+        events_here = self.event_by_person[fid]
         lines.extend(
             [
                 "",
@@ -351,6 +373,12 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
                 + ("Sin acontecimientos recuperados." if es else "No cached events.")
             )
 
+
+    def _render_sources(self, lines, person):
+        """Render the sources section for one person."""
+        fid = person["person_id"]
+        es = self.es
+        source_by_person = self.source_by_person
         lines.extend(["", "#### " + ("Fuentes" if es else "Sources"), ""])
         for source in source_by_person[fid]:
             title = source["title"] or source["source_id"]
@@ -391,6 +419,12 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
                 "- " + ("No hay fuentes recuperadas." if es else "No cached sources.")
             )
 
+
+    def _render_notes(self, lines, person):
+        """Render the notes section for one person."""
+        fid = person["person_id"]
+        es = self.es
+        note_by_person = self.note_by_person
         lines.extend(["", "#### " + ("Notas" if es else "Notes"), ""])
         for note in note_by_person[fid]:
             lines.append(
@@ -404,6 +438,12 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
                 "- " + ("No hay notas recuperadas." if es else "No cached notes.")
             )
 
+
+    def _render_memories(self, lines, person):
+        """Render the memories section for one person."""
+        fid = person["person_id"]
+        es = self.es
+        memory_by_person = self.memory_by_person
         lines.extend(["", "#### " + ("Recuerdos" if es else "Memories"), ""])
         for memory in memory_by_person[fid]:
             line = "- **" + _md(memory["title"] or memory["memory_id"]) + "**"
@@ -425,6 +465,14 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
                 + ("No hay recuerdos recuperados." if es else "No cached memories.")
             )
 
+
+    def _render_review(self, lines, person):
+        """Render the review section for one person."""
+        fid = person["person_id"]
+        es = self.es
+        language = self.language
+        saved = self.saved
+        events_here = self.event_by_person[fid]
         lines.extend(
             [
                 "",
@@ -439,10 +487,53 @@ def write_person_report(checkpoint, output, language="en", selected_ids=None):
             ]
         )
 
+
+    def render(self):
+        """Return the complete report as Markdown lines."""
+        lines = self._start_lines()
+        people = sorted(
+            self.people,
+            key=lambda p: (
+                self._birth_year(p),
+                p["name"].casefold(),
+                p["person_id"],
+            ),
+        )
+
+        for person in people:
+            self._render_intro(lines, person)
+            self._render_relationships(lines, person)
+            self._render_events(lines, person)
+            self._render_sources(lines, person)
+            self._render_notes(lines, person)
+            self._render_memories(lines, person)
+            self._render_review(lines, person)
+
+        return lines
+
+
+
+def write_person_report(checkpoint, output, language="en", selected_ids=None):
+    """Write a single Markdown report; return its path and record counts."""
+    output = Path(output).expanduser()
+    report = output.with_suffix(".md")
+    report.parent.mkdir(parents=True, exist_ok=True)
+
+    # Persist manually written reviews before regenerating the report,
+    # including notes for people omitted by the current scope.
+    written_reviews = _saved_reviews(report)
+    if written_reviews:
+        checkpoint.save_review_notes(written_reviews)
+
+    saved = checkpoint.load_review_notes()
+    data = collect_reports(checkpoint, selected_ids=selected_ids)
+    lines = _PersonReportRenderer(data, language, saved).render()
+
     temporary = report.with_name(report.name + ".tmp")
     temporary.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     os.chmod(temporary, 0o600)
     temporary.replace(report)
+
     return {
         "path": report,
         **{
