@@ -242,6 +242,63 @@ The program can only report FamilySearch details that were actually
 accessible and cached; a source attached to a person does not automatically
 prove every fact in that person's record.
 
+## Local research backend for the future graphical interface
+
+The SQLite research plan now has a **workspace service and a local JSON API**.
+The API reuses the already downloaded FamilySearch cache; it does **not** log
+in to FamilySearch or make network requests. Manual priorities, categories,
+branches, status changes and ordering remain in the research tables.
+
+After downloading a tree, start the local service from a cloned repository:
+
+```sh
+uv run --offline getmyfamilytree research --database ~/Downloads/GetMyFamilyTree/GetMyFamilyTree.sqlite serve
+```
+
+The server listens **only on `127.0.0.1`**, chooses an available port by
+default and prints its base URL and a fresh bearer token. The token must be
+sent as `Authorization: Bearer <token>` with every request; keep it private.
+Press Ctrl+C to stop. To request a specific port, add `--port 8765`.
+
+The JSON API uses `/api/v1` as its prefix:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/summary` | Research progress and board size |
+| GET | `/tasks` | Search and paginate with `search`, `status`, `category`, `branch`, `order`, `limit` and `offset` |
+| GET | `/people/{id}` | Individual sheet, events, relatives, notes, sources and memories |
+| PATCH | `/people/{id}/task` | Change one of `status`, `priority`, `category`, `branches` or `before_id` |
+| PUT | `/people/{id}/note` | Set or clear a separate private workspace note |
+| GET/POST | `/cards` | Browse or create research-board cards |
+| GET/PATCH/DELETE | `/cards/{id}` | Inspect, move, edit, link or remove one card |
+| GET/POST | `/assets` | List or import an image or PDF |
+| GET/DELETE | `/assets/{id}` | Inspect metadata or remove an unused attachment |
+| GET | `/assets/{id}/content` | Retrieve imported content for previews |
+
+Card data includes `kind` (`document`, `photo`, `note` or `person`),
+`title`, `description`, `url` or `asset_id`, coordinates `x`/`y`,
+`width`, `rotation`, and stacking order `z`. Cards can link to several
+already downloaded people. The future interface will animate opening and
+zooming documents; the backend stores the required references and positions.
+
+Import attachments with `POST /assets` and JSON fields `name` and
+`content_base64`. Up to 20 MiB per file is supported, for PDF, JPEG, PNG,
+WebP, GIF and TIFF. Imported files are held in a private `*.assets/` folder
+beside the SQLite checkpoint, with generated filenames. The API **cannot**
+read arbitrary file paths on the computer, and does not permit cross-origin
+browser access. Imported files are not put into the GEDCOM and are not
+uploaded to FamilySearch.
+
+The `workspace_person_notes` table is deliberately separate from existing
+Markdown `Mi revisión / My review` checklists, so regenerating the Markdown
+does not discard workspace notes. Existing CSV, GEDCOM and report-only
+commands remain unchanged.
+
+**Privacy:** The SQLite database and assets folder may contain personal
+information about living relatives. Never commit them to a public repository.
+The local service is intended for the eventual desktop application, not for
+hosting on the public internet.
+
 ## Limitations
 
 - The GEDCOM export currently uses the original `getmyancestors` writer. It may not retain every API field or download source-document/media image bytes.
