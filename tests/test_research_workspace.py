@@ -171,6 +171,35 @@ class ResearchWorkspaceTests(unittest.TestCase):
             self.checkpoint.get_response(PERSON_URL + "SELF-111"), before
         )
 
+    def test_managed_documents_have_private_storage_and_board_references(self):
+        asset = self.workspace.assets.import_bytes("archive/record.pdf", b"%PDF-test")
+        self.assertEqual(asset["name"], "record.pdf")
+        self.assertEqual(asset["media_type"], "application/pdf")
+        self.assertEqual(
+            self.workspace.assets.read(asset["id"]),
+            (b"%PDF-test", "application/pdf"),
+        )
+
+        card = self.workspace.create_card(
+            {"kind": "document", "title": "Record", "asset_id": asset["id"]},
+            people=["SELF-111"],
+        )
+        self.assertEqual(card["asset_id"], asset["id"])
+
+        with self.assertRaises(ValueError):
+            self.workspace.assets.delete(asset["id"])
+
+        self.workspace.delete_card(card["id"])
+        self.workspace.assets.delete(asset["id"])
+        self.assertEqual(self.workspace.assets.list(), [])
+
+        with self.assertRaises(ValueError):
+            self.workspace.assets.import_bytes("bad.html", b"<script></script>")
+        with self.assertRaises(KeyError):
+            self.workspace.create_card(
+                {"kind": "photo", "title": "Missing", "asset_id": asset["id"]}
+            )
+
     def test_summary_includes_research_progress_and_board_size(self):
         self.workspace.plan.set_status("FATH-111", "in_progress")
         self.workspace.create_card({"kind": "note", "title": "Parish archives"})
