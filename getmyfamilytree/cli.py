@@ -226,7 +226,7 @@ def crawl(
 
 
 # Existing callers rely on this public signature.
-def assemble(  # noqa: PLR0913
+def assemble(
     checkpoint,
     session,
     output,
