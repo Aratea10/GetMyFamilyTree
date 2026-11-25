@@ -111,6 +111,12 @@ def build_parser():
     move.add_argument("fid")
     move.add_argument("--before")
 
+    server = commands.add_parser(
+        "serve",
+        help="Start the local, token-protected research JSON API",
+    )
+    server.add_argument("--port", type=int, default=0)
+
     return parser
 
 
@@ -235,6 +241,12 @@ def _update_branches(plan, args):
 
 def _execute_command(plan, args, language):
     """Dispatch one parsed research command to the appropriate operation."""
+    if args.action == "serve":
+        from getmyfamilytree.research_api import serve_research
+
+        serve_research(plan.checkpoint, port=args.port)
+        return
+
     if args.action == "list":
         print_listing(plan, args, language)
         return
@@ -285,6 +297,9 @@ def run(argv, checkpoint_factory):
 
     if args.action == "list" and (args.limit < 0 or args.offset < 0):
         parser.error("--limit and --offset must be non-negative")
+
+    if args.action == "serve" and not 0 <= args.port <= 65535:
+        parser.error("--port must be between 0 and 65535")
 
     checkpoint = checkpoint_factory(database)
 
