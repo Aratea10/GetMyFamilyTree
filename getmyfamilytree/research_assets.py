@@ -48,6 +48,13 @@ class ResearchAssets:
         if not isinstance(asset_id, str) or not ASSET_ID.fullmatch(asset_id):
             raise ValueError("Invalid asset identifier")
 
+    def _disk_path(self, asset_id, filename):
+        """Reject invalid stored filenames before accessing the filesystem."""
+        suffix = Path(filename).suffix.lower()
+        if suffix not in MEDIA_TYPES or filename != asset_id + suffix:
+            raise ValueError("Invalid stored attachment filename")
+        return self.directory / filename
+
     def get(self, asset_id):
         """Return safe metadata without disclosing its private disk path."""
         self._validate_id(asset_id)
@@ -90,9 +97,7 @@ class ResearchAssets:
             raise KeyError(asset_id)
         filename, media_type = row
         # Disk names are generated internally, never supplied by the caller.
-        if not filename.startswith(asset_id + "."):
-            raise ValueError("Invalid stored attachment filename")
-        return (self.directory / filename).read_bytes(), media_type
+        return self._disk_path(asset_id, filename).read_bytes(), media_type
 
     def import_bytes(self, name, data):
         """Copy a PDF or image into the private workspace assets directory."""
@@ -149,6 +154,7 @@ class ResearchAssets:
             ).fetchone()
             if row is None:
                 raise KeyError(asset_id)
+            path = self._disk_path(asset_id, row[0])
             attached = self.checkpoint.connection.execute(
                 "SELECT 1 FROM workspace_cards WHERE asset_id = ? LIMIT 1",
                 (asset_id,),
@@ -158,4 +164,4 @@ class ResearchAssets:
             self.checkpoint.connection.execute(
                 "DELETE FROM workspace_assets WHERE id = ?", (asset_id,)
             )
-        (self.directory / row[0]).unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
