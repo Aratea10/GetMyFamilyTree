@@ -44,9 +44,7 @@ class ExportTree(Tree):
                 else None
             )
             child = (
-                relationship["child"]["resourceId"]
-                if "child" in relationship
-                else None
+                relationship["child"]["resourceId"] if "child" in relationship else None
             )
 
             if child in self.indi:
