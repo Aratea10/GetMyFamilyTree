@@ -26,3 +26,5 @@ GetMyFamilyTree.md
 *.notes.csv
 *.memories.csv
 *.review.csv
+# Private attachments imported into the local research board
+*.assets/
