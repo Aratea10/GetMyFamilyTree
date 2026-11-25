@@ -6,8 +6,8 @@ import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 
+from getmyfamilytree.checkpoint import Checkpoint
 from getmyfamilytree.cli import (
-    Checkpoint,
     ReplaySession,
     assemble,
     crawl,

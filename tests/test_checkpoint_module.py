@@ -36,9 +36,7 @@ class CheckpointModuleTests(unittest.TestCase):
                     },
                 )
                 checkpoint.finish(person_id, [])
-                checkpoint.save_review_notes(
-                    {person_id: "Verified birth record"}
-                )
+                checkpoint.save_review_notes({person_id: "Verified birth record"})
             finally:
                 checkpoint.close()
 
@@ -70,4 +68,3 @@ class CheckpointModuleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

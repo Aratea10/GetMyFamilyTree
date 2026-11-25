@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from getmyfamilytree.cli import Checkpoint, main, resolve_output_path
+from getmyfamilytree.checkpoint import Checkpoint
+from getmyfamilytree.cli import main, resolve_output_path
 from getmyfamilytree.person_report import write_person_report
 
 

@@ -7,7 +7,8 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from getmyfamilytree.cli import Checkpoint, main
+from getmyfamilytree.checkpoint import Checkpoint
+from getmyfamilytree.cli import main
 from getmyfamilytree.reports import FAMILIES_URL, PERSON_URL
 
 

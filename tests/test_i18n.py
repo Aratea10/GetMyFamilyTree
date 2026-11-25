@@ -8,7 +8,8 @@ from pathlib import Path
 from string import Formatter
 from unittest.mock import Mock, patch
 
-from getmyfamilytree.cli import Checkpoint, crawl, main
+from getmyfamilytree.checkpoint import Checkpoint
+from getmyfamilytree.cli import crawl, main
 from getmyfamilytree.i18n import MESSAGES, resolve_language, translate
 from getmyfamilytree.scopes import ScopeResult
 

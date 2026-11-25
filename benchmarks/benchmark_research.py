@@ -8,7 +8,7 @@ from itertools import pairwise
 from pathlib import Path
 from time import perf_counter
 
-from getmyfamilytree.cli import Checkpoint
+from getmyfamilytree.checkpoint import Checkpoint
 from getmyfamilytree.reports import FAMILIES_URL, PERSON_URL
 from getmyfamilytree.research_recommendations import build_recommendations
 
