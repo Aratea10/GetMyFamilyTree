@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import tempfile
 import threading
@@ -124,6 +125,39 @@ class ResearchAPITests(unittest.TestCase):
         with self.assertRaises(HTTPError) as caught:
             self.request("/cards/" + card["id"])
         self.assertEqual(caught.exception.code, 404)
+
+    def test_upload_and_preview_attachment_with_authorization(self):
+        status, asset = self.request(
+            "/assets",
+            method="POST",
+            payload={
+                "name": "old-record.pdf",
+                "content_base64": base64.b64encode(b"%PDF-test").decode("ascii"),
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(asset["media_type"], "application/pdf")
+
+        request = Request(
+            self.base + "/assets/" + asset["id"] + "/content",
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        with urlopen(request, timeout=5) as response:
+            self.assertEqual(response.read(), b"%PDF-test")
+            self.assertEqual(response.headers["Content-Type"], "application/pdf")
+
+        with self.assertRaises(HTTPError) as caught:
+            self.request(
+                "/assets",
+                method="POST",
+                payload={"name": "bad.exe", "content_base64": "YQ=="},
+            )
+        self.assertEqual(caught.exception.code, 400)
+
+        self.assertEqual(
+            self.request("/assets/" + asset["id"], method="DELETE")[0],
+            204,
+        )
 
     def test_invalid_requests_do_not_modify_data(self):
         with self.assertRaises(HTTPError) as caught:
