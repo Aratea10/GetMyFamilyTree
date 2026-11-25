@@ -223,6 +223,47 @@ def print_summary(plan, args, language):
         print(f"  {key}: {value}")
 
 
+def _update_branches(plan, args):
+    """Apply one manual branch update or restore automatic classification."""
+    if args.values == ["auto"]:
+        plan.set_branches(args.fid, None)
+    elif "auto" in args.values:
+        raise ValueError("'auto' cannot be combined with branch IDs")
+    else:
+        plan.set_branches(args.fid, args.values)
+
+
+def _execute_command(plan, args, language):
+    """Dispatch one parsed research command to the appropriate operation."""
+    if args.action == "list":
+        print_listing(plan, args, language)
+        return
+
+    if args.action == "summary":
+        print_summary(plan, args, language)
+        return
+
+    if args.action == "status":
+        plan.set_status(args.fid, args.value)
+    elif args.action == "priority":
+        plan.set_priority(args.fid, args.value)
+    elif args.action == "category":
+        value = None if args.value == "auto" else args.value
+        plan.set_category(args.fid, value)
+    elif args.action == "branches":
+        _update_branches(plan, args)
+    elif args.action == "move":
+        plan.move(args.fid, before_id=args.before)
+
+    print(
+        message(
+            language,
+            f"Actualizado: {args.fid}",
+            f"Updated: {args.fid}",
+        )
+    )
+
+
 def run(argv, checkpoint_factory):
     """Execute an offline research command.
 
@@ -230,9 +271,7 @@ def run(argv, checkpoint_factory):
     """
     parser = build_parser()
     args = parser.parse_args(argv)
-
     language = resolve_language(args.language)
-
     database = args.database.expanduser()
 
     if not database.is_file():
@@ -263,45 +302,9 @@ def run(argv, checkpoint_factory):
         plan.sync()
 
         try:
-            if args.action == "list":
-                print_listing(plan, args, language)
-
-            elif args.action == "summary":
-                print_summary(plan, args, language)
-
-            elif args.action == "status":
-                plan.set_status(args.fid, args.value)
-
-            elif args.action == "priority":
-                plan.set_priority(args.fid, args.value)
-
-            elif args.action == "category":
-                value = None if args.value == "auto" else args.value
-                plan.set_category(args.fid, value)
-
-            elif args.action == "branches":
-                if args.values == ["auto"]:
-                    plan.set_branches(args.fid, None)
-                elif "auto" in args.values:
-                    raise ValueError("'auto' cannot be combined with branch IDs")
-                else:
-                    plan.set_branches(args.fid, args.values)
-
-            elif args.action == "move":
-                plan.move(args.fid, before_id=args.before)
-
-            if args.action not in ("list", "summary"):
-                print(
-                    message(
-                        language,
-                        f"Actualizado: {args.fid}",
-                        f"Updated: {args.fid}",
-                    )
-                )
-
+            _execute_command(plan, args, language)
         except (ValueError, KeyError) as error:
             detail = error.args[0] if isinstance(error, KeyError) else str(error)
             parser.error(str(detail))
-
     finally:
         checkpoint.close()
