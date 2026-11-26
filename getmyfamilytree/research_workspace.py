@@ -410,9 +410,7 @@ class ResearchWorkspace:
             "memories": data["memories"],
             "review": self.checkpoint.load_review_notes().get(fid, ""),
             "research_note": self.get_person_note(fid),
-            "cards": [
-                card for card in self.list_cards() if fid in card["people"]
-            ],
+            "cards": self.list_cards(person_id=fid),
         }
 
     def _validate_people(self, identifiers):
@@ -435,8 +433,10 @@ class ResearchWorkspace:
             ((card_id, fid) for fid in people),
         )
 
-    def list_cards(self):
-        """List positioned board cards and their linked people."""
+    def list_cards(self, person_id=None):
+        """List cards for one person's board, or every card when unspecified."""
+        if person_id is not None:
+            self._require_person(person_id)
         with self.checkpoint.lock:
             rows = self.checkpoint.connection.execute(
                 """
@@ -460,10 +460,13 @@ class ResearchWorkspace:
             "id", "kind", "title", "description", "url", "asset_id",
             "x", "y", "width", "rotation", "z", "created_at", "updated_at",
         )
-        return [
+        cards = [
             {**dict(zip(columns, row)), "people": by_card[row[0]]}
             for row in rows
         ]
+        if person_id is not None:
+            return [card for card in cards if person_id in card["people"]]
+        return cards
 
     def get_card(self, card_id):
         """Return a specific board card or raise KeyError."""
