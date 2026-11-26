@@ -7,7 +7,6 @@ are kept separately from the downloaded GEDCOM and FamilySearch response cache.
 from __future__ import annotations
 
 import math
-import sqlite3
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -16,12 +15,23 @@ from uuid import uuid4
 
 from getmyfamilytree.reports import FAMILIES_URL, PERSON_URL, collect_reports
 from getmyfamilytree.research_assets import ASSET_ID, ResearchAssets
-from getmyfamilytree.research_plan import ResearchPlan, VALID_CATEGORIES, VALID_STATUSES
+from getmyfamilytree.research_plan import VALID_CATEGORIES, VALID_STATUSES, ResearchPlan
 from getmyfamilytree.scopes import _edges, _person_name
 
 CARD_KINDS = frozenset({"document", "photo", "person", "note"})
 CARD_FIELDS = frozenset(
-    {"kind", "title", "description", "url", "asset_id", "x", "y", "width", "rotation", "z"}
+    {
+        "kind",
+        "title",
+        "description",
+        "url",
+        "asset_id",
+        "x",
+        "y",
+        "width",
+        "rotation",
+        "z",
+    }
 )
 CARD_DEFAULTS = {
     "kind": "note",
@@ -124,9 +134,7 @@ def _person_overview(fid, events, relationships):
         elif kind == "sibling":
             category = "siblings"
         elif kind == "parent_child":
-            category = (
-                "children" if relationship["first_id"] == fid else "parents"
-            )
+            category = "children" if relationship["first_id"] == fid else "parents"
         if category is not None:
             relative_id = relationship["relative_id"]
             groups[category][relative_id] = {
@@ -144,9 +152,7 @@ def _person_overview(fid, events, relationships):
         "birth": first_event({"Birth"}),
         "baptism": first_event({"Baptism", "Christening"}),
         "death": first_event({"Death"}),
-        "marriages": [
-            event for event in events if event["event_type"] == "Marriage"
-        ],
+        "marriages": [event for event in events if event["event_type"] == "Marriage"],
         "parents": list(groups["parents"].values()),
         "partners": list(groups["partners"].values()),
         "children": list(groups["children"].values()),
@@ -193,7 +199,8 @@ class ResearchWorkspace:
                 """
             )
             columns = {
-                column[1] for column in checkpoint.connection.execute(
+                column[1]
+                for column in checkpoint.connection.execute(
                     "PRAGMA table_info(workspace_cards)"
                 )
             }
@@ -234,9 +241,9 @@ class ResearchWorkspace:
         """Apply independent filters without changing task ordering."""
         if search:
             tasks = [
-                task for task in tasks
-                if search in task["name"].casefold()
-                or search in task["id"].casefold()
+                task
+                for task in tasks
+                if search in task["name"].casefold() or search in task["id"].casefold()
             ]
         if query.status is not None:
             tasks = [task for task in tasks if task["status"] == query.status]
@@ -244,7 +251,8 @@ class ResearchWorkspace:
             tasks = [task for task in tasks if task["category"] == query.category]
         if query.branch is not None:
             tasks = [
-                task for task in tasks
+                task
+                for task in tasks
                 if any(branch["id"] == query.branch for branch in task["branches"])
             ]
         return tasks
@@ -254,13 +262,13 @@ class ResearchWorkspace:
         query = TaskQuery() if query is None else query
         self._validate_task_query(query)
         search = _validate_text(query.search, "search", 300).casefold().strip()
-        tasks = self._filter_tasks(
-            self.plan.items(order=query.order), query, search
-        )
+        tasks = self._filter_tasks(self.plan.items(order=query.order), query, search)
         total = len(tasks)
-        page = tasks[query.offset:] if query.limit == 0 else tasks[
-            query.offset:query.offset + query.limit
-        ]
+        page = (
+            tasks[query.offset :]
+            if query.limit == 0
+            else tasks[query.offset : query.offset + query.limit]
+        )
         return {
             "total": total,
             "offset": query.offset,
@@ -283,9 +291,7 @@ class ResearchWorkspace:
         }
         return {
             "people": len(tasks),
-            "statuses": {
-                status: statuses[status] for status in sorted(VALID_STATUSES)
-            },
+            "statuses": {status: statuses[status] for status in sorted(VALID_STATUSES)},
             "categories": {
                 category: categories[category] for category in sorted(VALID_CATEGORIES)
             },
@@ -464,11 +470,22 @@ class ResearchWorkspace:
             by_card[card_id].append(fid)
 
         columns = (
-            "id", "kind", "title", "description", "url", "asset_id",
-            "x", "y", "width", "rotation", "z", "created_at", "updated_at",
+            "id",
+            "kind",
+            "title",
+            "description",
+            "url",
+            "asset_id",
+            "x",
+            "y",
+            "width",
+            "rotation",
+            "z",
+            "created_at",
+            "updated_at",
         )
         cards = [
-            {**dict(zip(columns, row)), "people": by_card[row[0]]}
+            {**dict(zip(columns, row, strict=True)), "people": by_card[row[0]]}
             for row in rows
         ]
         if person_id is not None:
@@ -499,10 +516,19 @@ class ResearchWorkspace:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    card_id, data["kind"], data["title"], data["description"],
-                    data["url"], data["asset_id"], data["x"], data["y"],
-                    data["width"], data["rotation"], data["z"],
-                    timestamp, timestamp,
+                    card_id,
+                    data["kind"],
+                    data["title"],
+                    data["description"],
+                    data["url"],
+                    data["asset_id"],
+                    data["x"],
+                    data["y"],
+                    data["width"],
+                    data["rotation"],
+                    data["z"],
+                    timestamp,
+                    timestamp,
                 ),
             )
             self._replace_card_people(card_id, people)
@@ -513,9 +539,9 @@ class ResearchWorkspace:
         existing = self.get_card(card_id)
         if not isinstance(changes, dict):
             raise ValueError("Card changes must be an object")
-        data = _validate_card({
-            field: existing[field] for field in CARD_FIELDS
-        } | changes)
+        data = _validate_card(
+            {field: existing[field] for field in CARD_FIELDS} | changes
+        )
         if data["asset_id"] is not None:
             self.assets.get(data["asset_id"])
         linked_people = (
@@ -530,9 +556,18 @@ class ResearchWorkspace:
                 WHERE id=?
                 """,
                 (
-                    data["kind"], data["title"], data["description"], data["url"],
-                    data["asset_id"], data["x"], data["y"], data["width"],
-                    data["rotation"], data["z"], _updated_at(), card_id,
+                    data["kind"],
+                    data["title"],
+                    data["description"],
+                    data["url"],
+                    data["asset_id"],
+                    data["x"],
+                    data["y"],
+                    data["width"],
+                    data["rotation"],
+                    data["z"],
+                    _updated_at(),
+                    card_id,
                 ),
             )
             self._replace_card_people(card_id, linked_people)
