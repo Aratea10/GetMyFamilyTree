@@ -15,6 +15,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+from getmyfamilytree.research_jobs import JobOptions, ResearchJobs
 from getmyfamilytree.research_workspace import ResearchWorkspace, TaskQuery
 from getmyfamilytree.scopes import PERSON_ID
 
@@ -130,6 +131,8 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
         workspace = self.server.workspace
         if parts == ["summary"]:
             return workspace.summary()
+        if parts == ["jobs"]:
+            return self.server.jobs.status()
         if parts == ["tasks"]:
             return workspace.list_tasks(_query_options(parameters))
         if parts == ["cards"]:
@@ -231,7 +234,29 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             return HTTPStatus.OK, self._task_change(identifier, payload)
         raise KeyError("Unknown route")
 
+    def _write_job(self, method, parts, payload):
+        """Start a controlled job or request graceful download interruption."""
+        if method != "POST":
+            raise KeyError("Unknown route")
+        if parts == ["jobs", "pause"]:
+            if payload:
+                raise ValueError("Pause does not accept options")
+            return HTTPStatus.ACCEPTED, self.server.jobs.pause()
+        if parts != ["jobs"]:
+            raise KeyError("Unknown route")
+
+        allowed = {
+            "kind", "scope", "max_people", "generations",
+            "distance", "language", "csv",
+        }
+        if set(payload) - allowed or "kind" not in payload:
+            raise ValueError("Invalid research job options")
+        options = JobOptions(**payload)
+        return HTTPStatus.ACCEPTED, self.server.jobs.start(options)
+
     def _write(self, method, parts, payload):
+        if parts and parts[0] == "jobs":
+            return self._write_job(method, parts, payload)
         if parts and parts[0] == "assets":
             return self._write_asset(method, parts, payload)
         if parts and parts[0] == "cards":
@@ -301,6 +326,7 @@ def create_research_server(checkpoint, port=0, token=None):
     server.daemon_threads = True
     server.auth_token = secrets.token_urlsafe(32) if token is None else token
     server.workspace = ResearchWorkspace(checkpoint)
+    server.jobs = ResearchJobs(checkpoint)
     return server
 
 
