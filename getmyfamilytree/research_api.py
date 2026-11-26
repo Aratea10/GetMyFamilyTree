@@ -132,7 +132,13 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
         if parts == ["tasks"]:
             return workspace.list_tasks(_query_options(parameters))
         if parts == ["cards"]:
-            return {"items": workspace.list_cards()}
+            if set(parameters) - {"person_id"}:
+                raise ValueError("Unknown board query parameter")
+            people = parameters.get("person_id", [])
+            if len(people) > 1:
+                raise ValueError("Specify at most one person_id")
+            person_id = _person_id(people[0]) if people else None
+            return {"items": workspace.list_cards(person_id=person_id)}
         if parts == ["assets"]:
             return {"items": workspace.assets.list()}
         if len(parts) == 2 and parts[0] == "assets":
