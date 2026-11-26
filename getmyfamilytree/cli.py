@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import re
+import signal
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -832,6 +834,10 @@ def _run_export(args, parser, language, output_path, checkpoint_path):
 
 def main(argv=None):
     """Dispatch research, report-only and FamilySearch export commands"""
+    if os.name == "nt" and os.environ.get("GETMYFAMILYTREE_GUI_JOB") == "1":
+        # The GUI uses CTRL_BREAK_EVENT on Windows to request a safe pause.
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
+
     argv = sys.argv[1:] if argv is None else list(argv)
 
     if argv and argv[0] == "research":
