@@ -161,6 +161,58 @@ class ResearchAPITests(unittest.TestCase):
             204,
         )
 
+    def test_job_routes_validate_options_without_starting_processes(self):
+        _, state = self.request("/jobs")
+        self.assertEqual(state["status"], "idle")
+
+        with self.assertRaises(HTTPError) as caught:
+            self.request(
+                "/jobs",
+                method="POST",
+                payload={"kind": "reports", "scope": "ancestors"},
+            )
+        self.assertEqual(caught.exception.code, 400)
+
+        with self.assertRaises(HTTPError) as caught:
+            self.request(
+                "/jobs",
+                method="POST",
+                payload={"kind": "download"},
+            )
+        self.assertEqual(caught.exception.code, 400)
+
+        with self.assertRaises(HTTPError) as caught:
+            self.request("/jobs/pause", method="POST", payload={})
+        self.assertEqual(caught.exception.code, 400)
+
+    def test_backups_and_integrity_are_private(self):
+        _, integrity = self.request("/integrity")
+        self.assertTrue(integrity["ok"])
+
+        status, backup = self.request(
+            "/backups", method="POST", payload={}
+        )
+        self.assertEqual(status, 201)
+        _, listing = self.request("/backups")
+        self.assertEqual(listing["items"][0]["id"], backup["id"])
+
+        request = Request(
+            self.base + "/backups/" + backup["id"] + "/content",
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        with urlopen(request, timeout=5) as response:
+            self.assertEqual(response.headers["Content-Type"], "application/zip")
+            self.assertTrue(response.read().startswith(b"PK"))
+
+        with self.assertRaises(HTTPError) as caught:
+            self.request("/backups/" + backup["id"] + "/content", authenticated=False)
+        self.assertEqual(caught.exception.code, 401)
+
+        status, _ = self.request(
+            "/backups/" + backup["id"], method="DELETE"
+        )
+        self.assertEqual(status, 204)
+
     def test_invalid_requests_do_not_modify_data(self):
         with self.assertRaises(HTTPError) as caught:
             self.request(
