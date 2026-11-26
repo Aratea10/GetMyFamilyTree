@@ -23,7 +23,7 @@ jobs:
       - name: Install Ruff
         run: python -m pip install ruff
       - name: Format
-        run: python -m ruff format --check getmyfamilytree tests
+        run: python -m ruff format --check --diff getmyfamilytree tests
       - name: Lint
         run: python -m ruff check getmyfamilytree tests benchmarks
       - name: Complexity
