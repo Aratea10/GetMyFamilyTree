@@ -265,6 +265,13 @@ The JSON API uses `/api/v1` as its prefix:
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | GET | `/summary` | Research progress and board size |
+| GET | `/jobs` | Current download/report job, latest messages and cached counters |
+| POST | `/jobs` | Start a download or regenerate reports |
+| POST | `/jobs/pause` | Request a graceful pause of an active download |
+| GET | `/integrity` | Check SQLite integrity |
+| GET/POST | `/backups` | List or create private recovery archives |
+| GET/DELETE | `/backups/{id}` | Inspect or delete a recovery archive |
+| GET | `/backups/{id}/content` | Download a ZIP containing SQLite and imported documents |
 | GET | `/tasks` | Search and paginate with `search`, `status`, `category`, `branch`, `order`, `limit` and `offset` |
 | GET | `/people/{id}` | Individual sheet, events, relatives, notes, sources and memories |
 | PATCH | `/people/{id}/task` | Change one of `status`, `priority`, `category`, `branches` or `before_id` |
@@ -292,6 +299,56 @@ beside the SQLite checkpoint, with generated filenames. The API **cannot**
 read arbitrary file paths on the computer, and does not permit cross-origin
 browser access. Imported files are not put into the GEDCOM and are not
 uploaded to FamilySearch.
+
+### Download, pause, resume and regenerate reports
+
+The local API uses the already configured FamilySearch exporter. For example,
+the future desktop interface may send:
+
+```json
+{"kind": "download", "scope": "ancestors", "generations": 4, "max_people": 500}
+```
+
+to `POST /api/v1/jobs`. A full-family download uses
+`{"kind":"download","scope":"full","max_people":1000}`. The service starts
+one subprocess per job without a shell, and prevents simultaneous jobs on the
+same database. `GET /jobs` reports `running`, `pause_requested`,
+`paused`, `completed` or `failed`, the exit code, recent progress messages
+and the SQLite queue counters. Do not interpret queue counts as percentages
+of the entire FamilySearch tree, which can grow while downloading.
+
+`POST /jobs/pause` asks the exporter to stop gracefully. **The requested
+pause is not immediate:** exporting a partial GEDCOM and review may continue
+before the process exits. To resume, start the same download again; the
+checkpoint reuses already saved FamilySearch responses. An unexpected crash
+also leaves completed SQLite transactions available for the next run.
+
+New downloads initiated by this API require a previously saved FamilySearch
+login in the OS keyring, created on the user's computer with
+`--remember-login`. Passwords are **never** accepted by the local JSON API
+or included in subprocess arguments. The UI cannot automatically perform
+first-time interactive FamilySearch login yet.
+
+For **offline** reports, send `{"kind":"reports","csv":true}` to
+`POST /jobs`. The existing Markdown report and optional CSVs are regenerated
+from cached data without FamilySearch credentials. Output filenames are
+derived from the active SQLite database and stay beside it. The download job
+also creates the GEDCOM as before.
+
+### Integrity and private recovery archives
+
+`GET /integrity` performs SQLite's `PRAGMA quick_check`.
+`POST /backups` creates a consistent snapshot in a private folder ending
+in `.backups`, including the SQLite database, imported document files and a
+manifest. The archive is generated atomically and its attachment checksums
+are verified. Use `GET /backups/{id}/content` to save the ZIP through a
+trusted desktop client.
+
+The archive contains **personal data**. Do not publish, attach to issue
+reports or commit it. Backups are not restored automatically: stop the local
+service first, keep the original database safe, and extract the snapshot
+and attachments to the intended project paths. Automated restore and
+cross-device migrations are not yet implemented.
 
 The `workspace_person_notes` table is deliberately separate from existing
 Markdown `Mi revisión / My review` checklists, so regenerating the Markdown
