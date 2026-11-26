@@ -128,36 +128,53 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             raise ValueError("JSON body must be an object")
         return result
 
-    def _get(self, parts, parameters):
+    def _get_board(self, parameters):
+        """Read one personal board or the complete card collection."""
+        if set(parameters) - {"person_id"}:
+            raise ValueError("Unknown board query parameter")
+        people = parameters.get("person_id", [])
+        if len(people) > 1:
+            raise ValueError("Specify at most one person_id")
+        person_id = _person_id(people[0]) if people else None
+        return {"items": self.server.workspace.list_cards(person_id=person_id)}
+
+    def _get_collection(self, name, parameters):
+        """Dispatch collection requests without mixing unrelated resources."""
         workspace = self.server.workspace
-        if parts == ["summary"]:
-            return workspace.summary()
-        if parts == ["jobs"]:
-            return self.server.jobs.status()
-        if parts == ["integrity"]:
-            return self.server.backups.status()
-        if parts == ["backups"]:
-            return {"items": self.server.backups.list()}
-        if len(parts) == 2 and parts[0] == "backups":
-            return self.server.backups.get(parts[1])
-        if parts == ["tasks"]:
+        if name == "tasks":
             return workspace.list_tasks(_query_options(parameters))
-        if parts == ["cards"]:
-            if set(parameters) - {"person_id"}:
-                raise ValueError("Unknown board query parameter")
-            people = parameters.get("person_id", [])
-            if len(people) > 1:
-                raise ValueError("Specify at most one person_id")
-            person_id = _person_id(people[0]) if people else None
-            return {"items": workspace.list_cards(person_id=person_id)}
-        if parts == ["assets"]:
-            return {"items": workspace.assets.list()}
-        if len(parts) == 2 and parts[0] == "assets":
-            return workspace.assets.get(parts[1])
-        if len(parts) == 2 and parts[0] == "cards":
-            return workspace.get_card(_card_id(parts[1]))
-        if len(parts) == 2 and parts[0] == "people":
-            return workspace.person_detail(_person_id(parts[1]))
+        if name == "cards":
+            return self._get_board(parameters)
+
+        routes = {
+            "summary": workspace.summary,
+            "jobs": self.server.jobs.status,
+            "integrity": self.server.backups.status,
+            "backups": lambda: {"items": self.server.backups.list()},
+            "assets": lambda: {"items": workspace.assets.list()},
+        }
+        if name not in routes:
+            raise KeyError("Unknown route")
+        return routes[name]()
+
+    def _get_item(self, kind, identifier):
+        """Read a person, card, document or private backup by identifier."""
+        workspace = self.server.workspace
+        if kind == "people":
+            return workspace.person_detail(_person_id(identifier))
+        if kind == "cards":
+            return workspace.get_card(_card_id(identifier))
+        if kind == "assets":
+            return workspace.assets.get(identifier)
+        if kind == "backups":
+            return self.server.backups.get(identifier)
+        raise KeyError("Unknown route")
+
+    def _get(self, parts, parameters):
+        if len(parts) == 1:
+            return self._get_collection(parts[0], parameters)
+        if len(parts) == 2:
+            return self._get_item(parts[0], parts[1])
         raise KeyError("Unknown route")
 
     def _task_change(self, identifier, payload):

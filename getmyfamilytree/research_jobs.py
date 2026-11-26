@@ -44,19 +44,8 @@ def _nonnegative_integer(value):
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _validate_options(options):
-    """Validate options before starting a subprocess or modifying output."""
-    if not isinstance(options, JobOptions) or options.kind not in JOB_KINDS:
-        raise ValueError("Unsupported research job")
-    if options.scope not in SCOPES:
-        raise ValueError("Unsupported genealogy scope")
-    if options.language not in ("es", "en"):
-        raise ValueError("Unsupported interface language")
-    if not _nonnegative_integer(options.max_people):
-        raise ValueError("max_people must be a non-negative integer")
-    if not isinstance(options.csv, bool):
-        raise ValueError("csv must be a boolean")
-
+def _validate_scope_depth(options):
+    """Enforce the depth parameters required for each family scope."""
     if options.scope in ("ancestors", "descendants"):
         if (
             not _nonnegative_integer(options.generations)
@@ -71,6 +60,21 @@ def _validate_options(options):
             raise ValueError("Family scope requires distance")
     elif options.generations is not None or options.distance is not None:
         raise ValueError("Full scope does not accept a depth limit")
+
+
+def _validate_options(options):
+    """Validate options before starting a subprocess or modifying output."""
+    if not isinstance(options, JobOptions) or options.kind not in JOB_KINDS:
+        raise ValueError("Unsupported research job")
+    if options.scope not in SCOPES:
+        raise ValueError("Unsupported genealogy scope")
+    if options.language not in ("es", "en"):
+        raise ValueError("Unsupported interface language")
+    if not _nonnegative_integer(options.max_people):
+        raise ValueError("max_people must be a non-negative integer")
+    if not isinstance(options.csv, bool):
+        raise ValueError("csv must be a boolean")
+    _validate_scope_depth(options)
 
 
 def _command(database, origin, options):
