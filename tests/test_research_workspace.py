@@ -37,9 +37,7 @@ class ResearchWorkspaceTests(unittest.TestCase):
                         "date": {"original": "1920"},
                     }
                 ]
-            self.checkpoint.save_response(
-                PERSON_URL + fid, {"persons": [person]}
-            )
+            self.checkpoint.save_response(PERSON_URL + fid, {"persons": [person]})
             self.checkpoint.finish(fid, [])
 
         self.checkpoint.save_response(
@@ -97,16 +95,12 @@ class ResearchWorkspaceTests(unittest.TestCase):
         self.assertEqual(detail["review"], "Checked birth date")
         self.assertEqual(detail["research_note"], "Find parish record.")
         self.assertEqual(
-            [
-                item["relative_name"] for item in detail["relationships"]
-            ],
+            [item["relative_name"] for item in detail["relationships"]],
             ["Manuel de Castro", "Rosa de Castro"],
         )
         self.assertEqual(detail["overview"]["children_count"], 0)
         self.assertEqual(detail["overview"]["birth"]["date_original"], "1920")
-        self.assertEqual(
-            detail["overview"]["siblings"][0]["id"], "SIBL-111"
-        )
+        self.assertEqual(detail["overview"]["siblings"][0]["id"], "SIBL-111")
 
         with self.assertRaises(KeyError):
             self.workspace.person_detail("FAKE-111")
@@ -141,7 +135,8 @@ class ResearchWorkspaceTests(unittest.TestCase):
         self.assertEqual(first["x"], 115.0)
 
         updated = self.workspace.update_card(
-            first["id"], {"x": 250, "rotation": -4, "z": 3},
+            first["id"],
+            {"x": 250, "rotation": -4, "z": 3},
             people=["SELF-111"],
         )
         self.assertEqual(updated["title"], "Marriage record")
@@ -173,9 +168,7 @@ class ResearchWorkspaceTests(unittest.TestCase):
             self.workspace.create_card({"title": "Bad"}, people=["FAKE-111"])
 
         self.assertEqual(self.workspace.list_cards(), [])
-        self.assertEqual(
-            self.checkpoint.get_response(PERSON_URL + "SELF-111"), before
-        )
+        self.assertEqual(self.checkpoint.get_response(PERSON_URL + "SELF-111"), before)
 
     def test_managed_documents_have_private_storage_and_board_references(self):
         asset = self.workspace.assets.import_bytes("archive/record.pdf", b"%PDF-test")
