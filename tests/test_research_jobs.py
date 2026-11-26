@@ -142,9 +142,8 @@ class ResearchJobTests(unittest.TestCase):
             JobOptions(kind="reports", scope="family", distance=-2),
             JobOptions(kind="reports", scope="full", generations=3),
         ):
-            with self.subTest(options=options):
-                with self.assertRaises(ValueError):
-                    jobs.start(options)
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                jobs.start(options)
         self.assertEqual(self.calls, [])
 
     def test_failed_jobs_preserve_exit_code_and_output(self):
