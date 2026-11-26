@@ -100,7 +100,12 @@ class ResearchWorkspaceTests(unittest.TestCase):
             [
                 item["relative_name"] for item in detail["relationships"]
             ],
-            ["Manuel de Castro"],
+            ["Manuel de Castro", "Rosa de Castro"],
+        )
+        self.assertEqual(detail["overview"]["children_count"], 0)
+        self.assertEqual(detail["overview"]["birth"]["date_original"], "1920")
+        self.assertEqual(
+            detail["overview"]["siblings"][0]["id"], "SIBL-111"
         )
 
         with self.assertRaises(KeyError):
@@ -208,6 +213,9 @@ class ResearchWorkspaceTests(unittest.TestCase):
         self.assertEqual(summary["people"], 3)
         self.assertEqual(summary["statuses"]["in_progress"], 1)
         self.assertEqual(summary["cards"], 1)
+        self.assertEqual(summary["download"]["done"], 3)
+        self.assertEqual(summary["download"]["pending"], 0)
+        self.assertIsNotNone(summary["next_recommended"])
 
 
 if __name__ == "__main__":
