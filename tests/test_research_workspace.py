@@ -145,6 +145,7 @@ class ResearchWorkspaceTests(unittest.TestCase):
 
         self.checkpoint.close()
         self.checkpoint = Checkpoint(self.database)
+        self.addCleanup(self.checkpoint.close)
         reopened = ResearchWorkspace(self.checkpoint)
         self.assertEqual(reopened.get_card(first["id"])["x"], 250.0)
         self.assertEqual(
