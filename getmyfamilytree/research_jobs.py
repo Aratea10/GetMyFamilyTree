@@ -190,6 +190,7 @@ class ResearchJobs:
                     errors="replace",
                     bufsize=1,
                     creationflags=flags,
+                    start_new_session=os.name != "nt",
                     env={**os.environ, "GETMYFAMILYTREE_GUI_JOB": "1"},
                 )
             except OSError as error:
@@ -260,3 +261,30 @@ class ResearchJobs:
                 raise ValueError("Could not interrupt the download") from error
             self._state["status"] = "pause_requested"
             return self._snapshot()
+
+    def close(self):
+        """Stop outstanding child processes before the local service closes."""
+        with self._lock:
+            process = self._process
+            state = self._state
+
+        if process is None or process.poll() is not None:
+            return
+
+        if state["kind"] == "download" and state["status"] == "running":
+            try:
+                self.pause()
+            except ValueError:
+                pass
+
+        try:
+            process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            # Existing SQLite transactions survive termination. Incomplete
+            # GEDCOM output is still held in a .tmp file, not the final file.
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()

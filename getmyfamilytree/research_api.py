@@ -394,4 +394,5 @@ def serve_research(checkpoint, port=0):
     except KeyboardInterrupt:
         pass
     finally:
+        server.jobs.close()
         server.server_close()
