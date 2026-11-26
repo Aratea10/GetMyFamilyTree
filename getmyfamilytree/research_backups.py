@@ -70,10 +70,13 @@ class ResearchBackups:
             path = self.checkpoint.path.with_suffix(".assets") / filename
             if path.is_symlink() or not path.is_file():
                 raise ValueError("An imported document is missing or unsafe")
-            contents = path.read_bytes()
-            if len(contents) != size or hashlib.sha256(contents).hexdigest() != checksum:
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if path.stat().st_size != size or digest.hexdigest() != checksum:
                 raise ValueError("An imported document failed checksum validation")
-            items.append((filename, contents))
+            items.append((filename, path))
         return items
 
     def create(self):
@@ -109,8 +112,8 @@ class ResearchBackups:
                         temporary, mode="x", compression=zipfile.ZIP_DEFLATED
                     ) as archive:
                         archive.write(snapshot_path, arcname="research.sqlite")
-                        for filename, data in assets:
-                            archive.writestr(f"assets/{filename}", data)
+                        for filename, path in assets:
+                            archive.write(path, arcname=f"assets/{filename}")
                         archive.writestr(
                             "manifest.json",
                             json.dumps(metadata, ensure_ascii=False, indent=2),
