@@ -28,3 +28,4 @@ GetMyFamilyTree.md
 *.review.csv
 # Private attachments imported into the local research board
 *.assets/
+*.backups/
