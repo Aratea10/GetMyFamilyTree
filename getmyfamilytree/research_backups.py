@@ -9,6 +9,7 @@ import re
 import sqlite3
 import tempfile
 import zipfile
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -87,7 +88,7 @@ class ResearchBackups:
             snapshot_path = Path(folder) / "research.sqlite"
             try:
                 with self.checkpoint.lock:
-                    with sqlite3.connect(snapshot_path) as snapshot:
+                    with closing(sqlite3.connect(snapshot_path)) as snapshot:
                         self.checkpoint.connection.backup(snapshot)
                         issues = [
                             row[0] for row in snapshot.execute("PRAGMA quick_check")
