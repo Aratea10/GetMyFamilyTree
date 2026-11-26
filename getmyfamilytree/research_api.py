@@ -15,6 +15,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+from getmyfamilytree.research_backups import ResearchBackups
 from getmyfamilytree.research_jobs import JobOptions, ResearchJobs
 from getmyfamilytree.research_workspace import ResearchWorkspace, TaskQuery
 from getmyfamilytree.scopes import PERSON_ID
@@ -133,6 +134,12 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             return workspace.summary()
         if parts == ["jobs"]:
             return self.server.jobs.status()
+        if parts == ["integrity"]:
+            return self.server.backups.status()
+        if parts == ["backups"]:
+            return {"items": self.server.backups.list()}
+        if len(parts) == 2 and parts[0] == "backups":
+            return self.server.backups.get(parts[1])
         if parts == ["tasks"]:
             return workspace.list_tasks(_query_options(parameters))
         if parts == ["cards"]:
@@ -254,7 +261,20 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
         options = JobOptions(**payload)
         return HTTPStatus.ACCEPTED, self.server.jobs.start(options)
 
+    def _write_backup(self, method, parts, payload):
+        """Manage private backups without accepting arbitrary file paths."""
+        if payload:
+            raise ValueError("Backup operations do not accept options")
+        if method == "POST" and parts == ["backups"]:
+            return HTTPStatus.CREATED, self.server.backups.create()
+        if method == "DELETE" and len(parts) == 2 and parts[0] == "backups":
+            self.server.backups.delete(parts[1])
+            return HTTPStatus.NO_CONTENT, None
+        raise KeyError("Unknown route")
+
     def _write(self, method, parts, payload):
+        if parts and parts[0] == "backups":
+            return self._write_backup(method, parts, payload)
         if parts and parts[0] == "jobs":
             return self._write_job(method, parts, payload)
         if parts and parts[0] == "assets":
@@ -277,6 +297,15 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
 
         parts = parsed.path[len("/api/v1/") :].split("/")
         try:
+            if (
+                method == "GET"
+                and len(parts) == 3
+                and parts[0] == "backups"
+                and parts[2] == "content"
+            ):
+                data = self.server.backups.read(parts[1])
+                self._respond_asset(data, "application/zip")
+                return
             if (
                 method == "GET"
                 and len(parts) == 3
@@ -327,6 +356,7 @@ def create_research_server(checkpoint, port=0, token=None):
     server.auth_token = secrets.token_urlsafe(32) if token is None else token
     server.workspace = ResearchWorkspace(checkpoint)
     server.jobs = ResearchJobs(checkpoint)
+    server.backups = ResearchBackups(checkpoint)
     return server
 
 
