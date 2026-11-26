@@ -117,6 +117,8 @@ class ResearchAPITests(unittest.TestCase):
 
         _, detail = self.request("/people/SELF-111")
         self.assertEqual(len(detail["cards"]), 1)
+        _, board = self.request("/cards?person_id=SELF-111")
+        self.assertEqual([item["id"] for item in board["items"]], [card["id"]])
 
         self.assertEqual(
             self.request("/cards/" + card["id"], method="DELETE")[0],
