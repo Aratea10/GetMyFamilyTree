@@ -15,7 +15,6 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-from getmyfamilytree.research_assets import ASSET_ID
 from getmyfamilytree.research_workspace import ResearchWorkspace, TaskQuery
 from getmyfamilytree.scopes import PERSON_ID
 
@@ -69,9 +68,11 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
         """Avoid printing potentially private person IDs into server logs."""
 
     def _respond(self, status, result=None):
-        encoded = b"" if result is None else json.dumps(
-            result, ensure_ascii=False
-        ).encode("utf-8")
+        encoded = (
+            b""
+            if result is None
+            else json.dumps(result, ensure_ascii=False).encode("utf-8")
+        )
         self.send_response(status)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -97,7 +98,7 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
         value = self.headers.get("Authorization", "")
         prefix = "Bearer "
         return value.startswith(prefix) and secrets.compare_digest(
-            value[len(prefix):], self.server.auth_token
+            value[len(prefix) :], self.server.auth_token
         )
 
     def _body(self):
@@ -225,9 +226,7 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
                 raise ValueError("Expected the content field")
             workspace = self.server.workspace
             workspace.set_person_note(identifier, payload["content"])
-            return HTTPStatus.OK, {
-                "content": workspace.get_person_note(identifier)
-            }
+            return HTTPStatus.OK, {"content": workspace.get_person_note(identifier)}
         if method == "PATCH" and parts[2] == "task":
             return HTTPStatus.OK, self._task_change(identifier, payload)
         raise KeyError("Unknown route")
@@ -251,7 +250,7 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             self._respond(HTTPStatus.NOT_FOUND, {"error": "Unknown route"})
             return
 
-        parts = parsed.path[len("/api/v1/"):].split("/")
+        parts = parsed.path[len("/api/v1/") :].split("/")
         try:
             if (
                 method == "GET"
