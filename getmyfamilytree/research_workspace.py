@@ -60,6 +60,38 @@ def _validate_text(value, field, maximum=10000):
     return value
 
 
+def _validate_card_reference(result):
+    """Allow an external URL or a managed attachment, but never both."""
+    result["url"] = _validate_text(result["url"], "url", 2048)
+    if result["url"]:
+        url = urlsplit(result["url"])
+        if url.scheme not in ("http", "https") or not url.netloc:
+            raise ValueError("Card URLs must use http or https")
+
+    asset_id = result["asset_id"]
+    if asset_id is not None:
+        if not isinstance(asset_id, str) or not ASSET_ID.fullmatch(asset_id):
+            raise ValueError("Invalid card attachment")
+        if result["url"]:
+            raise ValueError("A card cannot use both a URL and a local attachment")
+
+
+def _validate_card_geometry(result):
+    """Normalize numbers and reject invalid canvas positions."""
+    for field in ("x", "y", "width", "rotation"):
+        value = result[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{field} must be a finite number")
+        if not math.isfinite(value):
+            raise ValueError(f"{field} must be a finite number")
+        result[field] = float(value)
+
+    if result["width"] <= 0 or result["width"] > 5000:
+        raise ValueError("Card width must be between 0 and 5000")
+    if isinstance(result["z"], bool) or not isinstance(result["z"], int):
+        raise ValueError("Card z-order must be an integer")
+
+
 def _validate_card(data):
     """Return normalized card data without accepting unknown fields."""
     if not isinstance(data, dict):
@@ -75,31 +107,8 @@ def _validate_card(data):
     if not result["title"].strip():
         raise ValueError("Card title cannot be empty")
     result["description"] = _validate_text(result["description"], "description")
-    result["url"] = _validate_text(result["url"], "url", 2048)
-    if result["url"]:
-        url = urlsplit(result["url"])
-        if url.scheme not in ("http", "https") or not url.netloc:
-            raise ValueError("Card URLs must use http or https")
-    if result["asset_id"] is not None:
-        if not isinstance(result["asset_id"], str):
-            raise ValueError("Invalid card attachment")
-        if not ASSET_ID.fullmatch(result["asset_id"]):
-            raise ValueError("Invalid card attachment")
-        if result["url"]:
-            raise ValueError("A card cannot use both a URL and a local attachment")
-
-    for field in ("x", "y", "width", "rotation"):
-        value = result[field]
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"{field} must be a finite number")
-        if not math.isfinite(value):
-            raise ValueError(f"{field} must be a finite number")
-        result[field] = float(value)
-
-    if result["width"] <= 0 or result["width"] > 5000:
-        raise ValueError("Card width must be between 0 and 5000")
-    if isinstance(result["z"], bool) or not isinstance(result["z"], int):
-        raise ValueError("Card z-order must be an integer")
+    _validate_card_reference(result)
+    _validate_card_geometry(result)
     return result
 
 
