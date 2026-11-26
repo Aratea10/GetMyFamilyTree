@@ -269,11 +269,15 @@ The JSON API uses `/api/v1` as its prefix:
 | GET | `/people/{id}` | Individual sheet, events, relatives, notes, sources and memories |
 | PATCH | `/people/{id}/task` | Change one of `status`, `priority`, `category`, `branches` or `before_id` |
 | PUT | `/people/{id}/note` | Set or clear a separate private workspace note |
-| GET/POST | `/cards` | Browse or create research-board cards |
+| GET/POST | `/cards` | Browse or create research-board cards (`?person_id=XXXX-XXX` to select one person's corcho) |
 | GET/PATCH/DELETE | `/cards/{id}` | Inspect, move, edit, link or remove one card |
 | GET/POST | `/assets` | List or import an image or PDF |
 | GET/DELETE | `/assets/{id}` | Inspect metadata or remove an unused attachment |
 | GET | `/assets/{id}/content` | Retrieve imported content for previews |
+
+Each person has an individual board view; the app filters cards by person,
+rather than displaying one enormous family-wide board. The same attachment
+can be referenced from separate cards with independent layouts.
 
 Card data includes `kind` (`document`, `photo`, `note` or `person`),
 `title`, `description`, `url` or `asset_id`, coordinates `x`/`y`,
