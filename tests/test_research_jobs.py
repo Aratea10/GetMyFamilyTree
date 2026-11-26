@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import Event
 
 from getmyfamilytree.checkpoint import Checkpoint
+from getmyfamilytree.reports import PERSON_URL
 from getmyfamilytree.research_jobs import JobOptions, ResearchJobs, _command
 
 
@@ -48,8 +49,8 @@ class _PendingProcess:
         self.release.wait(timeout=5)
         yield "Pausing the download\n"
 
-    def wait(self):
-        self.release.wait(timeout=5)
+    def wait(self, timeout=None):
+        self.release.wait(timeout=5 if timeout is None else timeout)
         return 0
 
     def poll(self):
@@ -77,11 +78,11 @@ class ResearchJobTests(unittest.TestCase):
 
     @staticmethod
     def _settled(jobs):
-        for _ in range(200):
+        for _ in range(600):
             status = jobs.status()
             if status["status"] in ("completed", "failed", "paused"):
                 return status
-            time.sleep(0.01)
+            time.sleep(0.02)
         raise AssertionError("Research job did not settle")
 
     def test_report_generation_uses_existing_checkpoint_without_login(self):
@@ -132,6 +133,33 @@ class ResearchJobTests(unittest.TestCase):
         self.assertEqual(result["status"], "pause_requested")
         self.assertEqual(len(process.signals), 1)
         self.assertEqual(self._settled(jobs)["status"], "paused")
+
+    def test_closing_the_service_requests_safe_pause(self):
+        process = _PendingProcess()
+        jobs = ResearchJobs(
+            self.store,
+            credentials=self.credentials,
+            popen=lambda command, **kwargs: process,
+        )
+        jobs.start(JobOptions(kind="download"))
+        jobs.close()
+        self.assertTrue(process.signals)
+        self.assertEqual(self._settled(jobs)["status"], "paused")
+
+    def test_offline_reports_run_in_a_real_subprocess(self):
+        self.store.seed(["SELF-111"])
+        self.store.save_response(
+            PERSON_URL + "SELF-111",
+            {"persons": [{"id": "SELF-111", "display": {"name": "Test"}}]},
+        )
+        self.store.finish("SELF-111", [])
+        jobs = ResearchJobs(self.store)
+        jobs.start(JobOptions(kind="reports", csv=True))
+        status = self._settled(jobs)
+
+        self.assertEqual(status["status"], "completed", status["messages"])
+        self.assertTrue(self.db.with_suffix(".md").is_file())
+        self.assertTrue(self.db.with_suffix(".events.csv").is_file())
 
     def test_bad_options_rejected_without_running_a_process(self):
         jobs = ResearchJobs(self.store, credentials=self.credentials, popen=self._popen)
