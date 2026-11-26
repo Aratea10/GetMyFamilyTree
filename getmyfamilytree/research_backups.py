@@ -37,16 +37,15 @@ class ResearchBackups:
     def status(self):
         """Check that the active SQLite database passes its quick integrity check."""
         with self.checkpoint.lock:
-            rows = self.checkpoint.connection.execute(
-                "PRAGMA quick_check"
-            ).fetchall()
+            rows = self.checkpoint.connection.execute("PRAGMA quick_check").fetchall()
         issues = [item[0] for item in rows if item[0] != "ok"]
         return {"ok": not issues, "issues": issues}
 
     def _assets_in_snapshot(self, snapshot):
         """List only internally generated, checksum-verified attachment paths."""
         tables = {
-            row[0] for row in snapshot.execute(
+            row[0]
+            for row in snapshot.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
@@ -94,7 +93,8 @@ class ResearchBackups:
                     with closing(sqlite3.connect(snapshot_path)) as snapshot:
                         self.checkpoint.connection.backup(snapshot)
                         issues = [
-                            row[0] for row in snapshot.execute("PRAGMA quick_check")
+                            row[0]
+                            for row in snapshot.execute("PRAGMA quick_check")
                             if row[0] != "ok"
                         ]
                         if issues:
@@ -148,9 +148,7 @@ class ResearchBackups:
             identifier = path.stem
             if BACKUP_ID.fullmatch(identifier) and not path.is_symlink():
                 result.append(self.get(identifier))
-        return sorted(
-            result, key=lambda item: item["created_at"], reverse=True
-        )
+        return sorted(result, key=lambda item: item["created_at"], reverse=True)
 
     def read(self, identifier):
         """Return the complete ZIP archive for authenticated download."""

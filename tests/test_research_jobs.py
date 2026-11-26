@@ -97,7 +97,9 @@ class ResearchJobTests(unittest.TestCase):
         self.assertIn("--report-only", command)
         self.assertIn("--csv", command)
         self.assertNotIn("--individual", command)
-        self.assertEqual(command[command.index("-o") + 1], str(self.db.with_suffix(".ged")))
+        self.assertEqual(
+            command[command.index("-o") + 1], str(self.db.with_suffix(".ged"))
+        )
         self.assertEqual(kwargs["stdin"], -3)
 
     def test_download_requires_saved_keyring_login(self):
@@ -119,7 +121,8 @@ class ResearchJobTests(unittest.TestCase):
     def test_graceful_pause_and_concurrent_job_rejection(self):
         process = _PendingProcess()
         jobs = ResearchJobs(
-            self.store, credentials=self.credentials,
+            self.store,
+            credentials=self.credentials,
             popen=lambda command, **kwargs: process,
         )
         jobs.start(JobOptions(kind="download", scope="family", distance=2))
@@ -158,7 +161,8 @@ class ResearchJobTests(unittest.TestCase):
 
     def test_command_uses_only_explicit_validated_options(self):
         command = _command(
-            self.db, "SELF-111",
+            self.db,
+            "SELF-111",
             JobOptions(kind="reports", scope="descendants", generations=2),
         )
         self.assertIn("--generations", command)

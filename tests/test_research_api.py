@@ -189,9 +189,7 @@ class ResearchAPITests(unittest.TestCase):
         _, integrity = self.request("/integrity")
         self.assertTrue(integrity["ok"])
 
-        status, backup = self.request(
-            "/backups", method="POST", payload={}
-        )
+        status, backup = self.request("/backups", method="POST", payload={})
         self.assertEqual(status, 201)
         _, listing = self.request("/backups")
         self.assertEqual(listing["items"][0]["id"], backup["id"])
@@ -208,9 +206,7 @@ class ResearchAPITests(unittest.TestCase):
             self.request("/backups/" + backup["id"] + "/content", authenticated=False)
         self.assertEqual(caught.exception.code, 401)
 
-        status, _ = self.request(
-            "/backups/" + backup["id"], method="DELETE"
-        )
+        status, _ = self.request("/backups/" + backup["id"], method="DELETE")
         self.assertEqual(status, 204)
 
     def test_invalid_requests_do_not_modify_data(self):

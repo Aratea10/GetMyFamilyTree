@@ -253,8 +253,13 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             raise KeyError("Unknown route")
 
         allowed = {
-            "kind", "scope", "max_people", "generations",
-            "distance", "language", "csv",
+            "kind",
+            "scope",
+            "max_people",
+            "generations",
+            "distance",
+            "language",
+            "csv",
         }
         if set(payload) - allowed or "kind" not in payload:
             raise ValueError("Invalid research job options")

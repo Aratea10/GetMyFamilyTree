@@ -58,10 +58,16 @@ def _validate_options(options):
         raise ValueError("csv must be a boolean")
 
     if options.scope in ("ancestors", "descendants"):
-        if not _nonnegative_integer(options.generations) or options.distance is not None:
+        if (
+            not _nonnegative_integer(options.generations)
+            or options.distance is not None
+        ):
             raise ValueError("Ancestor and descendant scopes require generations")
     elif options.scope == "family":
-        if not _nonnegative_integer(options.distance) or options.generations is not None:
+        if (
+            not _nonnegative_integer(options.distance)
+            or options.generations is not None
+        ):
             raise ValueError("Family scope requires distance")
     elif options.generations is not None or options.distance is not None:
         raise ValueError("Full scope does not accept a depth limit")
@@ -115,19 +121,22 @@ class ResearchJobs:
         self._messages = deque(maxlen=30)
 
     def _snapshot(self):
-        state = dict(self._state) if self._state is not None else {
-            "id": None,
-            "kind": None,
-            "status": "idle",
-            "started_at": None,
-            "finished_at": None,
-            "exit_code": None,
-            "error": None,
-        }
+        state = (
+            dict(self._state)
+            if self._state is not None
+            else {
+                "id": None,
+                "kind": None,
+                "status": "idle",
+                "started_at": None,
+                "finished_at": None,
+                "exit_code": None,
+                "error": None,
+            }
+        )
         state["messages"] = list(self._messages)
         state["download"] = {
-            name: self.checkpoint.count(name)
-            for name in ("done", "pending", "failed")
+            name: self.checkpoint.count(name) for name in ("done", "pending", "failed")
         }
         return state
 
@@ -143,9 +152,7 @@ class ResearchJobs:
         except CredentialStoreError as error:
             raise ValueError("Cannot access saved FamilySearch credentials") from error
         if credentials is None:
-            raise ValueError(
-                "Save a FamilySearch login using --remember-login first"
-            )
+            raise ValueError("Save a FamilySearch login using --remember-login first")
         # Never retain or return the password in the job controller.
 
     def start(self, options):
@@ -167,11 +174,7 @@ class ResearchJobs:
                 self._require_saved_login()
 
             command = _command(self.checkpoint.path, origin, options)
-            flags = (
-                subprocess.CREATE_NEW_PROCESS_GROUP
-                if os.name == "nt"
-                else 0
-            )
+            flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
             try:
                 process = self._popen(
                     command,
