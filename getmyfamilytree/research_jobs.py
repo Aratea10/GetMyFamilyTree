@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 from collections import deque
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -272,10 +273,8 @@ class ResearchJobs:
             return
 
         if state["kind"] == "download" and state["status"] == "running":
-            try:
+            with suppress(ValueError):
                 self.pause()
-            except ValueError:
-                pass
 
         try:
             process.wait(timeout=30)
