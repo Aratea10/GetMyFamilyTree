@@ -7,8 +7,8 @@ import json
 import tempfile
 import threading
 import unittest
-from unittest.mock import Mock
 from pathlib import Path
+from unittest.mock import Mock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
