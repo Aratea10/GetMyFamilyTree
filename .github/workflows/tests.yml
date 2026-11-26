@@ -31,4 +31,5 @@ jobs:
       - name: Compile
         run: python -m compileall -q getmyfamilytree tests
       - name: Test
+        timeout-minutes: 5
         run: python -m unittest discover -s tests -v

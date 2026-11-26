@@ -7,6 +7,7 @@ import json
 import tempfile
 import threading
 import unittest
+from unittest.mock import Mock
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -32,6 +33,9 @@ class ResearchAPITests(unittest.TestCase):
         self.server = create_research_server(
             self.checkpoint, port=0, token="test-secret"
         )
+        # Tests must not access a real OS credential vault.
+        self.server.jobs.credentials = Mock()
+        self.server.jobs.credentials.load.return_value = None
         self.thread = threading.Thread(
             target=self.server.serve_forever,
             daemon=True,
