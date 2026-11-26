@@ -183,6 +183,7 @@ class ResearchJobs:
                     errors="replace",
                     bufsize=1,
                     creationflags=flags,
+                    env={**os.environ, "GETMYFAMILYTREE_GUI_JOB": "1"},
                 )
             except OSError as error:
                 raise ValueError("Could not start the research job") from error
