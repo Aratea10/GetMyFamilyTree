@@ -112,6 +112,49 @@ def _validate_card(data):
     return result
 
 
+def _person_overview(fid, events, relationships):
+    """Summarize a person's life and relatives from cached evidence only."""
+    groups = {"parents": {}, "partners": {}, "children": {}, "siblings": {}}
+
+    for relationship in relationships:
+        kind = relationship["type"]
+        category = None
+        if kind == "couple":
+            category = "partners"
+        elif kind == "sibling":
+            category = "siblings"
+        elif kind == "parent_child":
+            category = (
+                "children" if relationship["first_id"] == fid else "parents"
+            )
+        if category is not None:
+            relative_id = relationship["relative_id"]
+            groups[category][relative_id] = {
+                "id": relative_id,
+                "name": relationship["relative_name"],
+            }
+
+    def first_event(kinds):
+        return next(
+            (event for event in events if event["event_type"] in kinds),
+            None,
+        )
+
+    return {
+        "birth": first_event({"Birth"}),
+        "baptism": first_event({"Baptism", "Christening"}),
+        "death": first_event({"Death"}),
+        "marriages": [
+            event for event in events if event["event_type"] == "Marriage"
+        ],
+        "parents": list(groups["parents"].values()),
+        "partners": list(groups["partners"].values()),
+        "children": list(groups["children"].values()),
+        "siblings": list(groups["siblings"].values()),
+        "children_count": len(groups["children"]),
+    }
+
+
 class ResearchWorkspace:
     """Expose research tasks, person details and board cards to a future UI."""
 
@@ -227,6 +270,10 @@ class ResearchWorkspace:
             cards = self.checkpoint.connection.execute(
                 "SELECT COUNT(*) FROM workspace_cards"
             ).fetchone()[0]
+        downloaded = {
+            state: self.checkpoint.count(state)
+            for state in ("done", "pending", "failed")
+        }
         return {
             "people": len(tasks),
             "statuses": {
@@ -235,6 +282,15 @@ class ResearchWorkspace:
             "categories": {
                 category: categories[category] for category in sorted(VALID_CATEGORIES)
             },
+            "download": downloaded,
+            "next_recommended": next(
+                (
+                    task["id"]
+                    for task in tasks
+                    if task["status"] in ("pending", "in_progress")
+                ),
+                None,
+            ),
             "cards": cards,
         }
 
@@ -288,6 +344,12 @@ class ResearchWorkspace:
 
         related = set()
         relationships = []
+        parents = {
+            first
+            for kind, first, second in edges
+            if kind == "parent_child" and second == fid
+        }
+
         for kind, first, second in sorted(edges):
             if fid not in (first, second):
                 continue
@@ -299,6 +361,25 @@ class ResearchWorkspace:
                     "first_id": first,
                     "second_id": second,
                     "relative_id": other,
+                }
+            )
+
+        # Siblings share one or more documented parents; the UI can link
+        # their individual sheets without expanding a whole family tree.
+        siblings = defaultdict(set)
+        for kind, first, second in edges:
+            if kind == "parent_child" and first in parents and second != fid:
+                siblings[second].add(first)
+
+        for sibling, shared_parents in sorted(siblings.items()):
+            related.add(sibling)
+            relationships.append(
+                {
+                    "type": "sibling",
+                    "first_id": fid,
+                    "second_id": sibling,
+                    "relative_id": sibling,
+                    "shared_parent_ids": sorted(shared_parents),
                 }
             )
 
@@ -317,11 +398,13 @@ class ResearchWorkspace:
         self._require_person(fid)
         task = next(item for item in self.plan.items() if item["id"] == fid)
         data = collect_reports(self.checkpoint, selected_ids=[fid])
+        relationships = self._person_relationships(fid)
         return {
             "task": task,
+            "overview": _person_overview(fid, data["events"], relationships),
             "person": data["people"][0] if data["people"] else None,
             "events": data["events"],
-            "relationships": self._person_relationships(fid),
+            "relationships": relationships,
             "sources": data["sources"],
             "notes": data["notes"],
             "memories": data["memories"],
