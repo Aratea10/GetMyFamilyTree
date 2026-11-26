@@ -183,11 +183,9 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
             return HTTPStatus.NO_CONTENT, None
         raise KeyError("Unknown route")
 
-    def _write(self, method, parts, payload):
+    def _write_card(self, method, parts, payload):
+        """Create or modify board cards while validating payload keys."""
         workspace = self.server.workspace
-
-        if parts and parts[0] == "assets":
-            return self._write_asset(method, parts, payload)
 
         if method == "POST" and parts == ["cards"]:
             if set(payload) - {"card", "people"}:
@@ -208,16 +206,33 @@ class _ResearchRequestHandler(BaseHTTPRequestHandler):
                 workspace.delete_card(card_id)
                 return HTTPStatus.NO_CONTENT, None
 
-        if len(parts) == 3 and parts[0] == "people":
-            identifier = _person_id(parts[1])
-            if method == "PUT" and parts[2] == "note":
-                if set(payload) != {"content"}:
-                    raise ValueError("Expected the content field")
-                workspace.set_person_note(identifier, payload["content"])
-                return HTTPStatus.OK, {"content": workspace.get_person_note(identifier)}
-            if method == "PATCH" and parts[2] == "task":
-                return HTTPStatus.OK, self._task_change(identifier, payload)
+        raise KeyError("Unknown route")
 
+    def _write_person(self, method, parts, payload):
+        """Apply person-level task changes or save a private research note."""
+        if len(parts) != 3 or parts[0] != "people":
+            raise KeyError("Unknown route")
+
+        identifier = _person_id(parts[1])
+        if method == "PUT" and parts[2] == "note":
+            if set(payload) != {"content"}:
+                raise ValueError("Expected the content field")
+            workspace = self.server.workspace
+            workspace.set_person_note(identifier, payload["content"])
+            return HTTPStatus.OK, {
+                "content": workspace.get_person_note(identifier)
+            }
+        if method == "PATCH" and parts[2] == "task":
+            return HTTPStatus.OK, self._task_change(identifier, payload)
+        raise KeyError("Unknown route")
+
+    def _write(self, method, parts, payload):
+        if parts and parts[0] == "assets":
+            return self._write_asset(method, parts, payload)
+        if parts and parts[0] == "cards":
+            return self._write_card(method, parts, payload)
+        if parts and parts[0] == "people":
+            return self._write_person(method, parts, payload)
         raise KeyError("Unknown route")
 
     def _dispatch(self, method):
