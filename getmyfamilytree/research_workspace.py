@@ -216,9 +216,8 @@ class ResearchWorkspace:
             )
         self.assets = ResearchAssets(checkpoint)
 
-    def list_tasks(self, query=None):
-        """Return a filtered, paginated list without modifying manual order."""
-        query = TaskQuery() if query is None else query
+    @staticmethod
+    def _validate_task_query(query):
         if not isinstance(query, TaskQuery):
             raise ValueError("query must be a TaskQuery")
         if query.order not in ("recommended", "manual"):
@@ -229,9 +228,10 @@ class ResearchWorkspace:
             raise ValueError("Unsupported research category")
         if query.limit < 0 or query.offset < 0:
             raise ValueError("Limit and offset cannot be negative")
-        search = _validate_text(query.search, "search", 300).casefold().strip()
-        tasks = self.plan.items(order=query.order)
 
+    @staticmethod
+    def _filter_tasks(tasks, query, search):
+        """Apply independent filters without changing task ordering."""
         if search:
             tasks = [
                 task for task in tasks
@@ -241,15 +241,22 @@ class ResearchWorkspace:
         if query.status is not None:
             tasks = [task for task in tasks if task["status"] == query.status]
         if query.category is not None:
-            tasks = [
-                task for task in tasks if task["category"] == query.category
-            ]
+            tasks = [task for task in tasks if task["category"] == query.category]
         if query.branch is not None:
             tasks = [
                 task for task in tasks
                 if any(branch["id"] == query.branch for branch in task["branches"])
             ]
+        return tasks
 
+    def list_tasks(self, query=None):
+        """Return a filtered, paginated list without modifying manual order."""
+        query = TaskQuery() if query is None else query
+        self._validate_task_query(query)
+        search = _validate_text(query.search, "search", 300).casefold().strip()
+        tasks = self._filter_tasks(
+            self.plan.items(order=query.order), query, search
+        )
         total = len(tasks)
         page = tasks[query.offset:] if query.limit == 0 else tasks[
             query.offset:query.offset + query.limit
